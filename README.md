@@ -1,48 +1,96 @@
 # Relatório de Chamados — Suporte N2
 
-Dashboard Streamlit conectado ao Supabase para armazenar e analisar a base anual de chamados.
+Aplicação em Streamlit para análise da base anual de chamados do Suporte N2.
 
 ## Funcionalidades
 
-- Área administrativa protegida por senha
-- Upload do Excel anual
-- Upsert dos chamados pelo número do chamado
-- Dashboard consultando o Supabase
-- Indicadores, análise semanal, problemas, lojas e responsáveis
-- Filtros por período, loja, problema, situação, responsável e SLA
+- Upload de Excel anual
+- Tratamento automático de datas do Excel
+- Remoção de duplicidades por número de chamado
+- Indicadores de chamados encerrados, pendentes e SLA
+- Evolução semanal
+- Top problemas
+- Top lojas
+- Análise por responsável
+- Filtros por período, loja, problema, status, responsável e SLA
 - Exportação do relatório filtrado em Excel
-- Remoção automática de milhares de colunas vazias/formatadas do Excel
 
-## Configuração do Supabase
+## Estrutura esperada da base
 
-Execute o arquivo `sql/criar_tabelas.sql` no SQL Editor do Supabase.
+A aplicação foi preparada para a base `base_chamados_2026.xlsx`, com colunas como:
 
-## Secrets do Streamlit Cloud
+- N° Chamado
+- Título
+- prioridade
+- Tipo do Chamado
+- TipoLocalizacao
+- Localizacao
+- Abertura
+- Situacao
+- StatusSLA
+- Equipe Responsavel
+- Responsavel
+- Categoria
+- Produto
+- Problema
+- Encerramento
+- descricao
+- solucao
+- Código de solução
 
-Em `Manage app → Settings → Secrets`, configure:
-
-```toml
-SUPABASE_URL = "https://SEU-PROJETO.supabase.co"
-SUPABASE_KEY = "SUA-CHAVE-SECRETA"
-ADMIN_PASSWORD = "SUA-SENHA-DE-ADMIN"
-```
-
-## Execução local
+## Instalação local
 
 ```powershell
 cd "C:\Projetos\Relatorio de chamados"
+
 py -m venv .venv
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
 .\.venv\Scripts\Activate.ps1
+
 python -m pip install -r requirements.txt
-python -m streamlit run streamlit_app.py
+
+python -m streamlit run app.py
 ```
 
-Para execução local, crie `.streamlit/secrets.toml` com as mesmas chaves. Esse arquivo está bloqueado no `.gitignore`.
+## GitHub
 
-## Publicação
+```powershell
+git init
+git add .
+git commit -m "Dashboard completo de chamados N2"
+git branch -M main
+git remote add origin https://github.com/SEU-USUARIO/relatorio-chamados-n2.git
+git push -u origin main
+```
 
-O arquivo principal no Streamlit Community Cloud deve ser:
+## Observação de segurança
+
+A base Excel está bloqueada no `.gitignore` e não deve ser enviada ao GitHub.
+
+
+## Configuração do Supabase no Streamlit Cloud
+
+Em **Manage app → Settings → Secrets**, configure:
+
+```toml
+SUPABASE_URL = "https://SEU-PROJETO.supabase.co"
+SUPABASE_KEY = "SUA-CHAVE-SECRETA-OU-SERVICE-ROLE"
+ADMIN_PASSWORD = "SUA-SENHA-DE-ADMIN"
+```
+
+A URL pode ser copiada com um caminho extra, mas o código normaliza automaticamente
+para a raiz do projeto. Ainda assim, o formato recomendado é somente:
 
 ```text
-streamlit_app.py
+https://SEU-PROJETO.supabase.co
+```
+
+## Atualização no GitHub
+
+```powershell
+git add .
+git commit -m "Corrige conexão e atualização no Supabase"
+git push
 ```

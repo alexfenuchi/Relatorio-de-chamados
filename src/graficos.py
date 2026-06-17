@@ -1,21 +1,10 @@
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 
-def _vazio(titulo: str, mensagem: str = "Sem dados para os filtros selecionados"):
-    fig = go.Figure()
-    fig.update_layout(title=titulo)
-    fig.add_annotation(text=mensagem, showarrow=False, x=0.5, y=0.5)
-    fig.update_xaxes(visible=False)
-    fig.update_yaxes(visible=False)
-    return fig
-
-
-def grafico_evolucao_semanal(df: pd.DataFrame):
+def grafico_evolucao_semanal(df):
     abertura = (
-        df.dropna(subset=["InicioSemana"])
-        .groupby("InicioSemana")["N° Chamado"]
+        df.groupby("InicioSemana")["N° Chamado"]
         .nunique()
         .reset_index(name="Abertos")
     )
@@ -34,17 +23,19 @@ def grafico_evolucao_semanal(df: pd.DataFrame):
         .rename(columns={"SemanaEncerramento": "InicioSemana"})
     )
 
-    semanal = abertura.merge(encerrados, on="InicioSemana", how="outer")
-    if semanal.empty:
-        return _vazio("Evolução semanal de chamados")
+    semanal = abertura.merge(
+        encerrados,
+        on="InicioSemana",
+        how="outer",
+    ).fillna(0).sort_values("InicioSemana")
 
-    semanal = semanal.fillna(0).sort_values("InicioSemana")
     longo = semanal.melt(
         id_vars="InicioSemana",
         value_vars=["Abertos", "Encerrados"],
         var_name="Tipo",
         value_name="Quantidade",
     )
+
     fig = px.line(
         longo,
         x="InicioSemana",
@@ -53,22 +44,26 @@ def grafico_evolucao_semanal(df: pd.DataFrame):
         markers=True,
         title="Evolução semanal de chamados",
     )
-    fig.update_layout(xaxis_title="Semana", yaxis_title="Quantidade", legend_title="")
+
+    fig.update_layout(
+        xaxis_title="Semana",
+        yaxis_title="Quantidade",
+        legend_title="",
+    )
+
     return fig
 
 
-def grafico_top_problemas(df: pd.DataFrame, top_n: int = 10):
+def grafico_top_problemas(df, top_n=10):
     dados = (
-        df.dropna(subset=["Problema"])
-        .groupby("Problema")["N° Chamado"]
+        df.groupby("Problema", dropna=False)["N° Chamado"]
         .nunique()
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
         .head(top_n)
         .sort_values("Quantidade")
     )
-    if dados.empty:
-        return _vazio(f"Top {top_n} problemas")
+
     fig = px.bar(
         dados,
         x="Quantidade",
@@ -77,22 +72,25 @@ def grafico_top_problemas(df: pd.DataFrame, top_n: int = 10):
         text="Quantidade",
         title=f"Top {top_n} problemas",
     )
-    fig.update_layout(xaxis_title="Chamados", yaxis_title="")
+
+    fig.update_layout(
+        xaxis_title="Chamados",
+        yaxis_title="",
+    )
+
     return fig
 
 
-def grafico_top_lojas(df: pd.DataFrame, top_n: int = 15):
+def grafico_top_lojas(df, top_n=15):
     dados = (
-        df.dropna(subset=["Localizacao"])
-        .groupby("Localizacao")["N° Chamado"]
+        df.groupby("Localizacao", dropna=False)["N° Chamado"]
         .nunique()
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
         .head(top_n)
         .sort_values("Quantidade")
     )
-    if dados.empty:
-        return _vazio(f"Top {top_n} lojas com mais chamados")
+
     fig = px.bar(
         dados,
         x="Quantidade",
@@ -101,19 +99,22 @@ def grafico_top_lojas(df: pd.DataFrame, top_n: int = 15):
         text="Quantidade",
         title=f"Top {top_n} lojas com mais chamados",
     )
-    fig.update_layout(xaxis_title="Chamados", yaxis_title="")
+
+    fig.update_layout(
+        xaxis_title="Chamados",
+        yaxis_title="",
+    )
+
     return fig
 
 
-def grafico_status(df: pd.DataFrame):
+def grafico_status(df):
     dados = (
-        df.assign(Situacao=df["Situacao"].fillna("Não informado"))
-        .groupby("Situacao")["N° Chamado"]
+        df.groupby("Situacao", dropna=False)["N° Chamado"]
         .nunique()
         .reset_index(name="Quantidade")
     )
-    if dados.empty:
-        return _vazio("Distribuição por situação")
+
     return px.pie(
         dados,
         names="Situacao",
@@ -123,16 +124,14 @@ def grafico_status(df: pd.DataFrame):
     )
 
 
-def grafico_sla(df: pd.DataFrame):
+def grafico_sla(df):
     dados = (
-        df.assign(StatusSLA=df["StatusSLA"].fillna("Não informado"))
-        .groupby("StatusSLA")["N° Chamado"]
+        df.groupby("StatusSLA", dropna=False)["N° Chamado"]
         .nunique()
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
     )
-    if dados.empty:
-        return _vazio("Chamados por status de SLA")
+
     fig = px.bar(
         dados,
         x="StatusSLA",
@@ -140,22 +139,25 @@ def grafico_sla(df: pd.DataFrame):
         text="Quantidade",
         title="Chamados por status de SLA",
     )
-    fig.update_layout(xaxis_title="Status SLA", yaxis_title="Chamados")
+
+    fig.update_layout(
+        xaxis_title="Status SLA",
+        yaxis_title="Chamados",
+    )
+
     return fig
 
 
-def grafico_responsaveis(df: pd.DataFrame, top_n: int = 15):
+def grafico_responsaveis(df, top_n=15):
     dados = (
-        df.dropna(subset=["Responsavel"])
-        .groupby("Responsavel")["N° Chamado"]
+        df.groupby("Responsavel", dropna=False)["N° Chamado"]
         .nunique()
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
         .head(top_n)
         .sort_values("Quantidade")
     )
-    if dados.empty:
-        return _vazio("Chamados por responsável")
+
     fig = px.bar(
         dados,
         x="Quantidade",
@@ -164,5 +166,10 @@ def grafico_responsaveis(df: pd.DataFrame, top_n: int = 15):
         text="Quantidade",
         title="Chamados por responsável",
     )
-    fig.update_layout(xaxis_title="Chamados", yaxis_title="")
+
+    fig.update_layout(
+        xaxis_title="Chamados",
+        yaxis_title="",
+    )
+
     return fig
