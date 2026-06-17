@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from urllib.parse import urlparse
+import math
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 from supabase import Client, create_client
@@ -13,11 +16,6 @@ TAMANHO_LOTE = 300
 
 
 def _normalizar_url_supabase(valor: str) -> str:
-    """
-    Aceita tanto a URL raiz quanto uma URL copiada com caminhos extras
-    e devolve somente a origem do projeto:
-    https://id-do-projeto.supabase.co
-    """
     url = str(valor or "").strip().strip('"').strip("'")
 
     if not url:
@@ -30,15 +28,8 @@ def _normalizar_url_supabase(valor: str) -> str:
 
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(
-            "SUPABASE_URL inválida. Use a URL do projeto, por exemplo: "
+            "SUPABASE_URL inválida. Use, por exemplo: "
             "https://seu-projeto.supabase.co"
-        )
-
-    host = parsed.netloc.strip().lower()
-
-    if "supabase.co" not in host and "supabase.in" not in host:
-        raise ValueError(
-            "SUPABASE_URL não parece ser uma URL válida de projeto Supabase."
         )
 
     return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
@@ -52,7 +43,7 @@ def obter_supabase() -> Client:
     except KeyError as erro:
         raise ValueError(
             f"Secret não configurado: {erro}. "
-            "Configure SUPABASE_URL e SUPABASE_KEY no Streamlit Cloud."
+            "Configure SUPABASE_URL e SUPABASE_KEY."
         ) from erro
 
     url = _normalizar_url_supabase(url_bruta)
@@ -64,9 +55,6 @@ def obter_supabase() -> Client:
 
 
 def testar_conexao() -> int:
-    """
-    Testa a leitura da tabela e retorna a quantidade total de registros.
-    """
     supabase = obter_supabase()
 
     resposta = (
@@ -122,6 +110,50 @@ def buscar_chamados() -> pd.DataFrame:
     return df
 
 
+def _valor_json_seguro(valor):
+    """
+    Converte valores do pandas/numpy em valores aceitos pelo JSON/PostgREST.
+    NaN, NaT, pd.NA e infinito viram None.
+    """
+    if valor is None:
+        return None
+
+    if isinstance(valor, (datetime, date, pd.Timestamp)):
+        if pd.isna(valor):
+            return None
+        return valor.isoformat()
+
+    if isinstance(valor, (np.integer,)):
+        return int(valor)
+
+    if isinstance(valor, (np.floating, float)):
+        numero = float(valor)
+        if math.isnan(numero) or math.isinf(numero):
+            return None
+        return numero
+
+    if isinstance(valor, (np.bool_,)):
+        return bool(valor)
+
+    try:
+        resultado_nulo = pd.isna(valor)
+        if isinstance(resultado_nulo, (bool, np.bool_)) and resultado_nulo:
+            return None
+    except (TypeError, ValueError):
+        pass
+
+    if isinstance(valor, dict):
+        return {
+            str(chave): _valor_json_seguro(conteudo)
+            for chave, conteudo in valor.items()
+        }
+
+    if isinstance(valor, (list, tuple, set)):
+        return [_valor_json_seguro(item) for item in valor]
+
+    return str(valor).strip()
+
+
 def preparar_registros_supabase(df: pd.DataFrame) -> list[dict]:
     mapa_colunas = {
         "N° Chamado": "numero_chamado",
@@ -171,27 +203,35 @@ def preparar_registros_supabase(df: pd.DataFrame) -> list[dict]:
         keep="last",
     )
 
+    # Converte datas; datas inválidas se tornam NaT e depois None.
     for coluna in ["abertura", "encerramento"]:
         dados[coluna] = pd.to_datetime(
             dados[coluna],
             errors="coerce",
         )
 
-        dados[coluna] = dados[coluna].apply(
-            lambda valor: valor.isoformat()
-            if pd.notna(valor)
-            else None
-        )
+    registros_brutos = dados.to_dict(orient="records")
 
-    for coluna in dados.columns:
-        if coluna not in {"abertura", "encerramento"}:
-            dados[coluna] = dados[coluna].apply(
-                lambda valor: None
-                if pd.isna(valor)
-                else str(valor).strip()
-            )
+    registros = [
+        {
+            chave: _valor_json_seguro(valor)
+            for chave, valor in registro.items()
+        }
+        for registro in registros_brutos
+    ]
 
-    return dados.to_dict(orient="records")
+    # Validação final: nenhum NaN ou infinito pode seguir para o Supabase.
+    for indice, registro in enumerate(registros):
+        for chave, valor in registro.items():
+            if isinstance(valor, float) and (
+                math.isnan(valor) or math.isinf(valor)
+            ):
+                raise ValueError(
+                    f"Valor inválido ainda presente no registro "
+                    f"{indice}, coluna '{chave}'."
+                )
+
+    return registros
 
 
 def atualizar_chamados(df: pd.DataFrame) -> int:
