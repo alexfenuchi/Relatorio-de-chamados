@@ -13,6 +13,7 @@ from src.graficos import (
     grafico_status,
     grafico_sla,
     grafico_responsaveis,
+    grafico_descricoes_problemas,
 )
 from src.exportacao import gerar_excel_relatorio
 
@@ -187,6 +188,26 @@ with aba4:
     st.dataframe(resumo_lojas, width="stretch", hide_index=True)
 
 with aba5:
+    st.subheader("Análise das descrições dos problemas")
+
+    quantidade_descricoes = st.selectbox(
+        "Quantidade de descrições no gráfico",
+        options=[5, 10, 15, 20],
+        index=1,
+        key="quantidade_descricoes",
+    )
+
+    st.plotly_chart(
+        grafico_descricoes_problemas(
+            df_filtrado,
+            top_n=quantidade_descricoes,
+        ),
+        width="stretch",
+    )
+
+    st.divider()
+    st.subheader("Detalhamento dos chamados")
+
     colunas_exibicao = [
         'N° Chamado', 'Título', 'prioridade', 'Tipo do Chamado', 'TipoLocalizacao',
         'Localizacao', 'Abertura', 'Situacao', 'StatusSLA', 'Equipe Responsavel',

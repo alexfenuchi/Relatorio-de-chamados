@@ -173,3 +173,85 @@ def grafico_responsaveis(df, top_n=15):
     )
 
     return fig
+
+def grafico_descricoes_problemas(df, top_n=10):
+    """
+    Cria um gráfico horizontal com as descrições de problemas mais recorrentes.
+
+    Descrições iguais são agrupadas. Textos longos são reduzidos no eixo,
+    mas permanecem completos no tooltip.
+    """
+    if "descricao" not in df.columns:
+        return px.bar(title="Descrições de problemas não disponíveis")
+
+    dados = df.copy()
+
+    dados["Descricao_Resumo"] = (
+        dados["descricao"]
+        .fillna("")
+        .astype(str)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
+    dados = dados[
+        dados["Descricao_Resumo"].ne("")
+        & dados["Descricao_Resumo"].str.lower().ne("nan")
+        & dados["Descricao_Resumo"].str.lower().ne("none")
+    ]
+
+    descricoes = (
+        dados.groupby("Descricao_Resumo", dropna=False)["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+        .sort_values("Quantidade", ascending=False)
+        .head(top_n)
+        .copy()
+    )
+
+    if descricoes.empty:
+        return px.bar(title="Nenhuma descrição de problema encontrada")
+
+    limite_texto = 90
+
+    descricoes["Descricao_Grafico"] = descricoes["Descricao_Resumo"].apply(
+        lambda texto: (
+            texto[:limite_texto] + "..."
+            if len(texto) > limite_texto
+            else texto
+        )
+    )
+
+    descricoes = descricoes.sort_values(
+        "Quantidade",
+        ascending=True,
+    )
+
+    figura = px.bar(
+        descricoes,
+        x="Quantidade",
+        y="Descricao_Grafico",
+        orientation="h",
+        text="Quantidade",
+        title=f"Top {top_n} descrições de problemas",
+        custom_data=["Descricao_Resumo"],
+    )
+
+    figura.update_traces(
+        hovertemplate=(
+            "<b>Descrição</b><br>"
+            "%{customdata[0]}<br><br>"
+            "<b>Chamados:</b> %{x}"
+            "<extra></extra>"
+        )
+    )
+
+    figura.update_layout(
+        xaxis_title="Quantidade de chamados",
+        yaxis_title="",
+        height=max(500, top_n * 42),
+        margin=dict(l=20, r=20, t=60, b=40),
+    )
+
+    return figura
+
