@@ -261,12 +261,14 @@ with aba1:
         st.plotly_chart(
             grafico_status(df_filtrado),
             width="stretch",
+            key="grafico_visao_status",
         )
 
     with col2:
         st.plotly_chart(
             grafico_sla(df_filtrado),
             width="stretch",
+            key="grafico_visao_sla",
         )
 
     col3, col4 = st.columns(2)
@@ -275,12 +277,14 @@ with aba1:
         st.plotly_chart(
             grafico_top_problemas(df_filtrado),
             width="stretch",
+            key="grafico_visao_top_problemas",
         )
 
     with col4:
         st.plotly_chart(
             grafico_top_lojas(df_filtrado),
             width="stretch",
+            key="grafico_visao_top_lojas",
         )
 
     col5, col6 = st.columns(2)
@@ -289,12 +293,14 @@ with aba1:
         st.plotly_chart(
             grafico_prioridades(df_filtrado),
             width="stretch",
+            key="grafico_visao_prioridades",
         )
 
     with col6:
         st.plotly_chart(
             grafico_aberturas_dia_semana(df_filtrado),
             width="stretch",
+            key="grafico_visao_dia_semana",
         )
 
 
@@ -302,6 +308,7 @@ with aba2:
     st.plotly_chart(
         grafico_evolucao_semanal(df_filtrado),
         width="stretch",
+        key="grafico_analise_evolucao_semanal",
     )
 
     semanas_validas = (
@@ -353,6 +360,7 @@ with aba2:
     st.plotly_chart(
         grafico_sla_semanal(df_filtrado),
         width="stretch",
+        key="grafico_analise_sla_semanal",
     )
 
 
@@ -366,6 +374,7 @@ with aba3:
                 top_n=15,
             ),
             width="stretch",
+            key="grafico_problemas_top15",
         )
 
     with col2:
@@ -375,6 +384,7 @@ with aba3:
                 top_n=10,
             ),
             width="stretch",
+            key="grafico_problemas_tempo_medio",
         )
 
     resumo_problemas = (
@@ -431,12 +441,14 @@ with aba4:
                 top_n=20,
             ),
             width="stretch",
+            key="grafico_lojas_top20",
         )
 
     with col2:
         st.plotly_chart(
             grafico_responsaveis(df_filtrado),
             width="stretch",
+            key="grafico_responsaveis",
         )
 
     resumo_lojas = (
@@ -496,12 +508,14 @@ with aba5:
         st.plotly_chart(
             grafico_aging_backlog(df_filtrado),
             width="stretch",
+            key="grafico_backlog_aging",
         )
 
     with col2:
         st.plotly_chart(
             grafico_sla_semanal(df_filtrado),
             width="stretch",
+            key="grafico_backlog_sla_semanal",
         )
 
     backlog = (
@@ -569,6 +583,7 @@ with aba6:
             top_n=quantidade_descricoes,
         ),
         width="stretch",
+        key="grafico_detalhamento_descricoes",
     )
 
     st.divider()
