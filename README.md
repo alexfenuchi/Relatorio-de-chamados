@@ -70,27 +70,22 @@ git push -u origin main
 A base Excel está bloqueada no `.gitignore` e não deve ser enviada ao GitHub.
 
 
-## Configuração do Supabase no Streamlit Cloud
+## Gráfico de descrições de problemas
 
-Em **Manage app → Settings → Secrets**, configure:
+A aba **Detalhamento** possui um gráfico horizontal com as descrições de problemas mais recorrentes. O usuário pode escolher exibir Top 5, 10, 15 ou 20 descrições. Descrições longas são resumidas no eixo e exibidas por completo ao passar o mouse.
 
-```toml
-SUPABASE_URL = "https://SEU-PROJETO.supabase.co"
-SUPABASE_KEY = "SUA-CHAVE-SECRETA-OU-SERVICE-ROLE"
-ADMIN_PASSWORD = "SUA-SENHA-DE-ADMIN"
-```
 
-A URL pode ser copiada com um caminho extra, mas o código normaliza automaticamente
-para a raiz do projeto. Ainda assim, o formato recomendado é somente:
+## Métricas de suporte adicionadas
 
-```text
-https://SEU-PROJETO.supabase.co
-```
+- Tempo médio e mediano de resolução em horas úteis.
+- Conversão de 1 dia trabalhado para 8 horas.
+- Segunda a sexta-feira como dias úteis.
+- SLA semanal e percentual dentro do prazo.
+- Backlog por faixa de idade.
+- Aging médio e aging máximo.
+- Chamados por prioridade.
+- Chamados abertos por dia da semana.
+- Problemas com maior tempo médio de resolução.
+- Lista dos chamados pendentes mais antigos.
 
-## Atualização no GitHub
-
-```powershell
-git add .
-git commit -m "Corrige conexão e atualização no Supabase"
-git push
-```
+**Observação:** feriados ainda não são descontados do cálculo.

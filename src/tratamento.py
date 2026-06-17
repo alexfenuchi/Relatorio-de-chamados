@@ -1,30 +1,9 @@
 import re
+from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
-
-COLUNAS_PERMITIDAS = [
-    "N° Chamado",
-    "Título",
-    "prioridade",
-    "Tipo do Chamado",
-    "TipoLocalizacao",
-    "Localizacao",
-    "Abertura",
-    "Situacao",
-    "StatusSLA",
-    "SLA Atendimento",
-    "ExecucaoAtendimento",
-    "Equipe Responsavel",
-    "Responsavel",
-    "Categoria",
-    "Produto",
-    "Problema",
-    "Encerramento",
-    "descricao",
-    "solucao",
-    "Código de solução",
-]
 
 COLUNAS_DATA = [
     "Abertura",
@@ -40,6 +19,16 @@ STATUS_ENCERRADOS = {
     "concluido",
     "resolvido",
     "finalizado",
+}
+
+DIAS_SEMANA_PT = {
+    0: "Segunda",
+    1: "Terça",
+    2: "Quarta",
+    3: "Quinta",
+    4: "Sexta",
+    5: "Sábado",
+    6: "Domingo",
 }
 
 
@@ -72,17 +61,83 @@ def _converter_data_excel(serie):
     return datas_excel.fillna(datas_texto)
 
 
+def _horas_uteis_8h(inicio, fim):
+    """
+    Calcula duração em horas considerando:
+    - segunda a sexta-feira;
+    - cada dia útil equivalente a 8 horas;
+    - diferença do horário de início e fim preservada.
+
+    Exemplo:
+    segunda 09:00 até terça 09:00 = 8 horas.
+    sexta 14:00 até segunda 10:00 = 4 horas.
+
+    Feriados não são descontados nesta versão.
+    """
+    if pd.isna(inicio) or pd.isna(fim) or fim < inicio:
+        return np.nan
+
+    inicio = pd.Timestamp(inicio)
+    fim = pd.Timestamp(fim)
+
+    if inicio.date() == fim.date():
+        if inicio.weekday() >= 5:
+            return 0.0
+        return min(max((fim - inicio).total_seconds() / 3600, 0.0), 8.0)
+
+    dias_uteis = np.busday_count(
+        inicio.date(),
+        fim.date(),
+        weekmask="1111100",
+    )
+
+    diferenca_horario = (
+        (
+            fim.hour
+            + fim.minute / 60
+            + fim.second / 3600
+        )
+        -
+        (
+            inicio.hour
+            + inicio.minute / 60
+            + inicio.second / 3600
+        )
+    )
+
+    horas = float(dias_uteis * 8 + diferenca_horario)
+
+    dias_uteis_inclusivos = np.busday_count(
+        inicio.date(),
+        (fim + pd.Timedelta(days=1)).date(),
+        weekmask="1111100",
+    )
+    limite_maximo = float(dias_uteis_inclusivos * 8)
+
+    return min(max(horas, 0.0), limite_maximo)
+
+
+def _faixa_aging(horas):
+    if pd.isna(horas):
+        return "Sem informação"
+    if horas <= 8:
+        return "Até 1 dia"
+    if horas <= 24:
+        return "2 a 3 dias"
+    if horas <= 40:
+        return "4 a 5 dias"
+    if horas <= 80:
+        return "6 a 10 dias"
+    return "Acima de 10 dias"
+
+
 def preparar_base(df):
     dados = df.copy()
     dados.columns = dados.columns.astype(str).str.strip()
 
-    colunas_existentes = [
-        coluna
-        for coluna in COLUNAS_PERMITIDAS
-        if coluna in dados.columns
-    ]
-
-    dados = dados[colunas_existentes].copy()
+    # Remove colunas completamente vazias, inclusive as milhares de colunas
+    # formatadas sem conteúdo que podem existir no Excel.
+    dados = dados.dropna(axis=1, how="all")
     dados = dados.dropna(how="all")
 
     colunas_obrigatorias = [
@@ -138,18 +193,25 @@ def preparar_base(df):
         "Situacao",
         "StatusSLA",
         "Código de solução",
+        "prioridade",
+        "Tipo do Chamado",
     ]:
         if coluna in dados.columns:
             dados[coluna] = dados[coluna].apply(_limpar_texto)
 
-    if "StatusSLA" not in dados.columns:
-        dados["StatusSLA"] = None
-
-    if "Produto" not in dados.columns:
-        dados["Produto"] = None
-
-    if "Responsavel" not in dados.columns:
-        dados["Responsavel"] = None
+    for coluna in [
+        "StatusSLA",
+        "Produto",
+        "Categoria",
+        "Responsavel",
+        "Equipe Responsavel",
+        "prioridade",
+        "Tipo do Chamado",
+        "descricao",
+        "solucao",
+    ]:
+        if coluna not in dados.columns:
+            dados[coluna] = None
 
     dados["Status_Normalizado"] = (
         dados["Situacao"]
@@ -174,7 +236,6 @@ def preparar_base(df):
     dados["Data_Abertura"] = dados["Abertura"].dt.date
     dados["Ano"] = dados["Abertura"].dt.year
     dados["Mes"] = dados["Abertura"].dt.to_period("M").astype(str)
-
     dados["InicioSemana"] = (
         dados["Abertura"]
         - pd.to_timedelta(
@@ -183,16 +244,46 @@ def preparar_base(df):
         )
     ).dt.normalize()
 
-    if "Encerramento" in dados.columns:
-        diferenca = (
-            dados["Encerramento"] - dados["Abertura"]
-        ).dt.total_seconds() / 3600
+    dados["DiaSemana"] = (
+        dados["Abertura"]
+        .dt.weekday
+        .map(DIAS_SEMANA_PT)
+    )
 
-        dados["Tempo_Resolucao_Horas"] = diferenca.where(
-            diferenca >= 0
-        )
-    else:
+    dados["HoraAbertura"] = dados["Abertura"].dt.hour
+
+    if "Encerramento" not in dados.columns:
         dados["Encerramento"] = pd.NaT
-        dados["Tempo_Resolucao_Horas"] = pd.NA
+
+    dados["Tempo_Resolucao_Horas"] = dados.apply(
+        lambda linha: _horas_uteis_8h(
+            linha["Abertura"],
+            linha["Encerramento"],
+        ),
+        axis=1,
+    )
+
+    dados["Tempo_Resolucao_Dias"] = (
+        dados["Tempo_Resolucao_Horas"] / 8
+    )
+
+    agora = pd.Timestamp.now().tz_localize(None)
+
+    dados["Idade_Pendente_Horas"] = dados.apply(
+        lambda linha: (
+            _horas_uteis_8h(linha["Abertura"], agora)
+            if not linha["Encerrado_Flag"]
+            else np.nan
+        ),
+        axis=1,
+    )
+
+    dados["Idade_Pendente_Dias"] = (
+        dados["Idade_Pendente_Horas"] / 8
+    )
+
+    dados["Faixa_Aging"] = dados["Idade_Pendente_Horas"].apply(
+        _faixa_aging
+    )
 
     return dados

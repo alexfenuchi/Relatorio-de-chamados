@@ -7,5 +7,3 @@ bases/
 *.xlsx
 *.xls
 .DS_Store
-
-.git/

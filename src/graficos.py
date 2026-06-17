@@ -255,3 +255,197 @@ def grafico_descricoes_problemas(df, top_n=10):
 
     return figura
 
+def grafico_aging_backlog(df):
+    ordem = [
+        "Até 1 dia",
+        "2 a 3 dias",
+        "4 a 5 dias",
+        "6 a 10 dias",
+        "Acima de 10 dias",
+    ]
+
+    dados = (
+        df.loc[~df["Encerrado_Flag"]]
+        .groupby("Faixa_Aging", dropna=False)["N° Chamado"]
+        .nunique()
+        .reindex(ordem, fill_value=0)
+        .reset_index(name="Quantidade")
+    )
+
+    figura = px.bar(
+        dados,
+        x="Faixa_Aging",
+        y="Quantidade",
+        text="Quantidade",
+        title="Backlog por faixa de idade",
+    )
+
+    figura.update_layout(
+        xaxis_title="Idade do chamado (1 dia = 8 horas)",
+        yaxis_title="Chamados pendentes",
+    )
+
+    return figura
+
+
+def grafico_sla_semanal(df):
+    dados = df.copy()
+    dados["Dentro_SLA_Flag"] = dados["SLA_Normalizado"].isin(
+        ["em dia", "dentro", "dentro do prazo"]
+    )
+    dados["SLA_Classificado"] = dados["SLA_Normalizado"].isin(
+        [
+            "em dia",
+            "dentro",
+            "dentro do prazo",
+            "em atraso",
+            "fora",
+            "fora do prazo",
+        ]
+    )
+
+    semanal = (
+        dados.loc[dados["SLA_Classificado"]]
+        .groupby("InicioSemana")
+        .agg(
+            Total=("N° Chamado", "nunique"),
+            DentroSLA=("Dentro_SLA_Flag", "sum"),
+        )
+        .reset_index()
+    )
+
+    semanal["SLA_Percentual"] = (
+        semanal["DentroSLA"]
+        / semanal["Total"]
+        * 100
+    )
+
+    figura = px.line(
+        semanal,
+        x="InicioSemana",
+        y="SLA_Percentual",
+        markers=True,
+        title="Evolução semanal do SLA",
+    )
+
+    figura.update_layout(
+        xaxis_title="Semana",
+        yaxis_title="SLA dentro do prazo (%)",
+    )
+
+    figura.update_yaxes(range=[0, 100])
+
+    return figura
+
+
+def grafico_aberturas_dia_semana(df):
+    ordem = [
+        "Segunda",
+        "Terça",
+        "Quarta",
+        "Quinta",
+        "Sexta",
+        "Sábado",
+        "Domingo",
+    ]
+
+    dados = (
+        df.groupby("DiaSemana")["N° Chamado"]
+        .nunique()
+        .reindex(ordem, fill_value=0)
+        .reset_index(name="Quantidade")
+    )
+
+    figura = px.bar(
+        dados,
+        x="DiaSemana",
+        y="Quantidade",
+        text="Quantidade",
+        title="Chamados abertos por dia da semana",
+    )
+
+    figura.update_layout(
+        xaxis_title="Dia da semana",
+        yaxis_title="Chamados",
+    )
+
+    return figura
+
+
+def grafico_tempo_medio_problema(df, top_n=10):
+    dados = (
+        df.loc[
+            df["Encerrado_Flag"]
+            & df["Tempo_Resolucao_Horas"].notna()
+        ]
+        .groupby("Problema")
+        .agg(
+            Quantidade=("N° Chamado", "nunique"),
+            Tempo_Medio_Horas=("Tempo_Resolucao_Horas", "mean"),
+        )
+        .reset_index()
+    )
+
+    # Evita destacar médias de grupos com apenas um chamado.
+    dados = dados[dados["Quantidade"] >= 2]
+
+    dados = (
+        dados.sort_values(
+            "Tempo_Medio_Horas",
+            ascending=False,
+        )
+        .head(top_n)
+        .sort_values("Tempo_Medio_Horas")
+    )
+
+    figura = px.bar(
+        dados,
+        x="Tempo_Medio_Horas",
+        y="Problema",
+        orientation="h",
+        text="Tempo_Medio_Horas",
+        title=f"Top {top_n} problemas com maior tempo médio",
+        custom_data=["Quantidade"],
+    )
+
+    figura.update_traces(
+        texttemplate="%{text:.1f} h",
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Tempo médio: %{x:.1f} h<br>"
+            "Chamados: %{customdata[0]}"
+            "<extra></extra>"
+        ),
+    )
+
+    figura.update_layout(
+        xaxis_title="Tempo médio útil (horas)",
+        yaxis_title="",
+    )
+
+    return figura
+
+
+def grafico_prioridades(df):
+    dados = (
+        df.groupby("prioridade", dropna=False)["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+        .sort_values("Quantidade", ascending=False)
+    )
+
+    figura = px.bar(
+        dados,
+        x="prioridade",
+        y="Quantidade",
+        text="Quantidade",
+        title="Chamados por prioridade",
+    )
+
+    figura.update_layout(
+        xaxis_title="Prioridade",
+        yaxis_title="Chamados",
+    )
+
+    return figura
+
