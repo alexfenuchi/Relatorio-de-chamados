@@ -28,6 +28,11 @@ def renderizar_filtros(df):
         max_value=data_max,
     )
 
+    grupos = st.sidebar.multiselect(
+        "Grupo",
+        _opcoes(df, "Grupo_Localizacao"),
+    )
+
     lojas = st.sidebar.multiselect(
         "Loja",
         _opcoes(df, "Localizacao"),
@@ -55,6 +60,7 @@ def renderizar_filtros(df):
 
     return {
         "periodo": periodo,
+        "grupos": grupos,
         "lojas": lojas,
         "problemas": problemas,
         "status": status,
@@ -74,6 +80,7 @@ def aplicar_filtros(df, filtros):
         ]
 
     mapas = {
+        "grupos": "Grupo_Localizacao",
         "lojas": "Localizacao",
         "problemas": "Problema",
         "status": "Situacao",

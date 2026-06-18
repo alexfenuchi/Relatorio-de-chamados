@@ -12,7 +12,7 @@ Aplicação em Streamlit para análise da base anual de chamados do Suporte N2.
 - Top problemas
 - Top lojas
 - Análise por responsável
-- Filtros por período, loja, problema, status, responsável e SLA
+- Filtros por período, grupo (Loja/CD), loja, problema, status, responsável e SLA
 - Exportação do relatório filtrado em Excel
 
 ## Estrutura esperada da base
