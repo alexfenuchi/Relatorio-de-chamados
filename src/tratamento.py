@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from datetime import datetime
 
 import numpy as np
@@ -30,6 +31,34 @@ DIAS_SEMANA_PT = {
     5: "Sábado",
     6: "Domingo",
 }
+
+
+def _normalizar_para_comparacao(valor):
+    if pd.isna(valor):
+        return ""
+
+    texto = unicodedata.normalize("NFKD", str(valor))
+    texto = "".join(
+        caractere
+        for caractere in texto
+        if not unicodedata.combining(caractere)
+    )
+    texto = re.sub(r"\s+", " ", texto)
+    return texto.strip().lower()
+
+
+def _grupo_localizacao(linha):
+    tipo = _normalizar_para_comparacao(
+        linha.get("TipoLocalizacao")
+    )
+    localizacao = _normalizar_para_comparacao(
+        linha.get("Localizacao")
+    )
+
+    if "loja" in tipo or "loja" in localizacao:
+        return "Loja"
+
+    return "CD"
 
 
 def _limpar_texto(valor):
@@ -195,6 +224,7 @@ def preparar_base(df):
         "Código de solução",
         "prioridade",
         "Tipo do Chamado",
+        "TipoLocalizacao",
     ]:
         if coluna in dados.columns:
             dados[coluna] = dados[coluna].apply(_limpar_texto)
@@ -209,9 +239,15 @@ def preparar_base(df):
         "Tipo do Chamado",
         "descricao",
         "solucao",
+        "TipoLocalizacao",
     ]:
         if coluna not in dados.columns:
             dados[coluna] = None
+
+    dados["Grupo_Localizacao"] = dados.apply(
+        _grupo_localizacao,
+        axis=1,
+    )
 
     dados["Status_Normalizado"] = (
         dados["Situacao"]
