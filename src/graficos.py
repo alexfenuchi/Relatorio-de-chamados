@@ -174,6 +174,88 @@ def grafico_responsaveis(df, top_n=15):
 
     return fig
 
+
+def grafico_top_titulos(df, top_n=10):
+    """
+    Cria um gráfico horizontal com os títulos de chamados mais recorrentes.
+
+    Títulos iguais são agrupados. Textos longos são reduzidos no eixo,
+    mas permanecem completos no tooltip.
+    """
+    if "Título" not in df.columns:
+        return px.bar(title="Títulos de chamados não disponíveis")
+
+    dados = df.copy()
+
+    dados["Titulo_Resumo"] = (
+        dados["Título"]
+        .fillna("")
+        .astype(str)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
+    dados = dados[
+        dados["Titulo_Resumo"].ne("")
+        & dados["Titulo_Resumo"].str.lower().ne("nan")
+        & dados["Titulo_Resumo"].str.lower().ne("none")
+    ]
+
+    titulos = (
+        dados.groupby("Titulo_Resumo", dropna=False)["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+        .sort_values("Quantidade", ascending=False)
+        .head(top_n)
+        .copy()
+    )
+
+    if titulos.empty:
+        return px.bar(title="Nenhum título de chamado encontrado")
+
+    limite_texto = 90
+
+    titulos["Titulo_Grafico"] = titulos["Titulo_Resumo"].apply(
+        lambda texto: (
+            texto[:limite_texto] + "..."
+            if len(texto) > limite_texto
+            else texto
+        )
+    )
+
+    titulos = titulos.sort_values(
+        "Quantidade",
+        ascending=True,
+    )
+
+    figura = px.bar(
+        titulos,
+        x="Quantidade",
+        y="Titulo_Grafico",
+        orientation="h",
+        text="Quantidade",
+        title=f"Top {top_n} títulos dos chamados",
+        custom_data=["Titulo_Resumo"],
+    )
+
+    figura.update_traces(
+        hovertemplate=(
+            "<b>Título</b><br>"
+            "%{customdata[0]}<br><br>"
+            "<b>Chamados:</b> %{x}"
+            "<extra></extra>"
+        )
+    )
+
+    figura.update_layout(
+        xaxis_title="Quantidade de chamados",
+        yaxis_title="",
+        height=max(500, top_n * 42),
+        margin=dict(l=20, r=20, t=60, b=40),
+    )
+
+    return figura
+
 def grafico_descricoes_problemas(df, top_n=10):
     """
     Cria um gráfico horizontal com as descrições de problemas mais recorrentes.

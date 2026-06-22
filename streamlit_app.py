@@ -13,6 +13,7 @@ from src.graficos import (
     grafico_status,
     grafico_sla,
     grafico_responsaveis,
+    grafico_top_titulos,
     grafico_descricoes_problemas,
     grafico_aging_backlog,
     grafico_sla_semanal,
@@ -567,24 +568,44 @@ with aba5:
 
 with aba6:
     st.subheader(
-        "Análise das descrições dos problemas"
+        "Análise dos títulos e descrições dos chamados"
     )
 
-    quantidade_descricoes = st.selectbox(
-        "Quantidade de descrições no gráfico",
-        options=[5, 10, 15, 20],
-        index=1,
-        key="quantidade_descricoes",
-    )
+    col_titulos, col_descricoes = st.columns(2)
 
-    st.plotly_chart(
-        grafico_descricoes_problemas(
-            df_filtrado,
-            top_n=quantidade_descricoes,
-        ),
-        width="stretch",
-        key="grafico_detalhamento_descricoes",
-    )
+    with col_titulos:
+        quantidade_titulos = st.selectbox(
+            "Quantidade de títulos no gráfico",
+            options=[5, 10, 15, 20],
+            index=1,
+            key="quantidade_titulos",
+        )
+
+        st.plotly_chart(
+            grafico_top_titulos(
+                df_filtrado,
+                top_n=quantidade_titulos,
+            ),
+            width="stretch",
+            key="grafico_detalhamento_titulos",
+        )
+
+    with col_descricoes:
+        quantidade_descricoes = st.selectbox(
+            "Quantidade de descrições no gráfico",
+            options=[5, 10, 15, 20],
+            index=1,
+            key="quantidade_descricoes",
+        )
+
+        st.plotly_chart(
+            grafico_descricoes_problemas(
+                df_filtrado,
+                top_n=quantidade_descricoes,
+            ),
+            width="stretch",
+            key="grafico_detalhamento_descricoes",
+        )
 
     st.divider()
     st.subheader("Detalhamento dos chamados")
