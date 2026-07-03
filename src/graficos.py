@@ -531,3 +531,85 @@ def grafico_prioridades(df):
 
     return figura
 
+
+
+def grafico_sla_por_nivel(df):
+    dados = (
+        df[df["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])]
+        .groupby(["nivelsla", "SLA_Medido_Status"], dropna=False)["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+    )
+
+    if dados.empty:
+        return px.bar(title="Medição de SLA por nível sem dados classificados")
+
+    figura = px.bar(
+        dados,
+        x="nivelsla",
+        y="Quantidade",
+        color="SLA_Medido_Status",
+        text="Quantidade",
+        barmode="group",
+        title="Medição de SLA por nível",
+        color_discrete_map={
+            "Dentro do SLA": "#2ca02c",
+            "Fora do SLA": "#d62728",
+        },
+    )
+
+    figura.update_layout(
+        xaxis_title="Nível SLA",
+        yaxis_title="Chamados",
+        legend_title="Status medido",
+    )
+
+    return figura
+
+
+def grafico_percentual_sla_por_nivel(df):
+    dados = df[df["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])].copy()
+
+    if dados.empty:
+        return px.bar(title="Percentual de SLA por nível sem dados classificados")
+
+    resumo = (
+        dados.groupby("nivelsla", dropna=False)
+        .agg(
+            Total=("N° Chamado", "nunique"),
+            Dentro=(
+                "SLA_Medido_Status",
+                lambda valores: (valores == "Dentro do SLA").sum(),
+            ),
+        )
+        .reset_index()
+    )
+    resumo["Percentual_Dentro"] = resumo["Dentro"] / resumo["Total"] * 100
+    resumo = resumo.sort_values("Percentual_Dentro")
+
+    figura = px.bar(
+        resumo,
+        x="Percentual_Dentro",
+        y="nivelsla",
+        orientation="h",
+        text="Percentual_Dentro",
+        title="Percentual dentro do SLA por nível",
+        custom_data=["Total"],
+    )
+
+    figura.update_traces(
+        texttemplate="%{text:.1f}%",
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Dentro do SLA: %{x:.1f}%<br>"
+            "Chamados: %{customdata[0]}"
+            "<extra></extra>"
+        ),
+    )
+    figura.update_layout(
+        xaxis_title="Dentro do SLA (%)",
+        yaxis_title="",
+    )
+    figura.update_xaxes(range=[0, 100])
+
+    return figura

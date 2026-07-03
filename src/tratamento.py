@@ -22,6 +22,19 @@ STATUS_ENCERRADOS = {
     "finalizado",
 }
 
+SLA_NIVEIS_HORAS = {
+    "Suporte_TI_P1": 2,
+    "Suporte_TI_P2": 4,
+    "Suporte_TI_P3": 8,
+    "Suporte_TI_P4": 24,
+    "Suporte_TI_P5": 72,
+    "SuporteAdm_P1": 4,
+    "SuporteAdm_P2": 8,
+    "SuporteAdm_P3": 16,
+    "SuporteAdm_P4": 32,
+}
+
+
 DIAS_SEMANA_PT = {
     0: "Segunda",
     1: "Terça",
@@ -225,6 +238,7 @@ def preparar_base(df):
         "prioridade",
         "Tipo do Chamado",
         "TipoLocalizacao",
+        "nivelsla",
     ]:
         if coluna in dados.columns:
             dados[coluna] = dados[coluna].apply(_limpar_texto)
@@ -240,6 +254,7 @@ def preparar_base(df):
         "descricao",
         "solucao",
         "TipoLocalizacao",
+        "nivelsla",
     ]:
         if coluna not in dados.columns:
             dados[coluna] = None
@@ -318,8 +333,30 @@ def preparar_base(df):
         dados["Idade_Pendente_Horas"] / 8
     )
 
-    dados["Faixa_Aging"] = dados["Idade_Pendente_Horas"].apply(
-        _faixa_aging
+    dados["SLA_Meta_Horas"] = dados["nivelsla"].map(SLA_NIVEIS_HORAS)
+
+    dados["SLA_Tempo_Medido_Horas"] = np.where(
+        dados["Encerrado_Flag"],
+        dados["Tempo_Resolucao_Horas"],
+        dados["Idade_Pendente_Horas"],
     )
+
+    dados["SLA_Medido_Status"] = np.select(
+        [
+            dados["SLA_Meta_Horas"].isna(),
+            dados["SLA_Tempo_Medido_Horas"].isna(),
+            dados["SLA_Tempo_Medido_Horas"] <= dados["SLA_Meta_Horas"],
+        ],
+        [
+            "Sem meta cadastrada",
+            "Sem tempo calculado",
+            "Dentro do SLA",
+        ],
+        default="Fora do SLA",
+    )
+
+    dados["SLA_Excedido_Horas"] = (
+        dados["SLA_Tempo_Medido_Horas"] - dados["SLA_Meta_Horas"]
+    ).clip(lower=0)
 
     return dados
