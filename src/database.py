@@ -174,6 +174,7 @@ def preparar_registros_supabase(df: pd.DataFrame) -> list[dict]:
         "descricao": "descricao",
         "solucao": "solucao",
         "Código de solução": "codigo_solucao",
+        "nivelsla": "nivelsla",
     }
 
     dados = df.rename(columns=mapa_colunas).copy()

@@ -20,6 +20,8 @@ from src.graficos import (
     grafico_aberturas_dia_semana,
     grafico_tempo_medio_problema,
     grafico_prioridades,
+    grafico_sla_por_nivel,
+    grafico_percentual_sla_por_nivel,
 )
 from src.exportacao import gerar_excel_relatorio
 
@@ -167,6 +169,7 @@ df_banco = df_banco.rename(
         "descricao": "descricao",
         "solucao": "solucao",
         "codigo_solucao": "Código de solução",
+        "nivelsla": "nivelsla",
     }
 )
 
@@ -243,13 +246,14 @@ c8.metric(
 )
 
 
-aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs(
+aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
     [
         "Visão geral",
         "Análise semanal",
         "Problemas",
         "Lojas e responsáveis",
         "SLA e backlog",
+        "Medição SLA",
         "Detalhamento",
     ]
 )
@@ -567,6 +571,92 @@ with aba5:
 
 
 with aba6:
+    st.subheader("Medição de SLA por nível")
+    st.caption(
+        "A medição usa a coluna nivelsla e compara a meta cadastrada "
+        "com o tempo útil de resolução dos encerrados ou o aging dos pendentes."
+    )
+
+    sla_classificados = df_filtrado[
+        df_filtrado["SLA_Medido_Status"].isin([
+            "Dentro do SLA",
+            "Fora do SLA",
+        ])
+    ]
+    total_medido = sla_classificados["N° Chamado"].nunique()
+    dentro_medido = sla_classificados.loc[
+        sla_classificados["SLA_Medido_Status"] == "Dentro do SLA",
+        "N° Chamado",
+    ].nunique()
+    fora_medido = sla_classificados.loc[
+        sla_classificados["SLA_Medido_Status"] == "Fora do SLA",
+        "N° Chamado",
+    ].nunique()
+    percentual_medido = (
+        dentro_medido / total_medido * 100
+        if total_medido
+        else 0
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Chamados medidos", f"{total_medido:,}".replace(",", "."))
+    m2.metric("Dentro do SLA", f"{dentro_medido:,}".replace(",", "."))
+    m3.metric("Fora do SLA", f"{fora_medido:,}".replace(",", "."))
+    m4.metric("Aderência", f"{percentual_medido:.1f}%")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(
+            grafico_sla_por_nivel(df_filtrado),
+            width="stretch",
+            key="grafico_medicao_sla_nivel",
+        )
+    with col2:
+        st.plotly_chart(
+            grafico_percentual_sla_por_nivel(df_filtrado),
+            width="stretch",
+            key="grafico_percentual_sla_nivel",
+        )
+
+    resumo_sla = (
+        df_filtrado.groupby("nivelsla", dropna=False)
+        .agg(
+            Meta_Horas=("SLA_Meta_Horas", "first"),
+            Quantidade=("N° Chamado", "nunique"),
+            Dentro_SLA=(
+                "SLA_Medido_Status",
+                lambda valores: (valores == "Dentro do SLA").sum(),
+            ),
+            Fora_SLA=(
+                "SLA_Medido_Status",
+                lambda valores: (valores == "Fora do SLA").sum(),
+            ),
+            Tempo_Medio_Medido_Horas=("SLA_Tempo_Medido_Horas", "mean"),
+            Excedido_Medio_Horas=("SLA_Excedido_Horas", "mean"),
+        )
+        .reset_index()
+        .sort_values("nivelsla", na_position="last")
+    )
+    resumo_sla["Aderencia_Percentual"] = (
+        resumo_sla["Dentro_SLA"]
+        / (resumo_sla["Dentro_SLA"] + resumo_sla["Fora_SLA"]).replace(0, pd.NA)
+        * 100
+    ).fillna(0)
+
+    st.dataframe(
+        resumo_sla,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Meta_Horas": st.column_config.NumberColumn("Meta (h)", format="%.1f"),
+            "Tempo_Medio_Medido_Horas": st.column_config.NumberColumn("Tempo médio medido (h)", format="%.1f"),
+            "Excedido_Medio_Horas": st.column_config.NumberColumn("Excedido médio (h)", format="%.1f"),
+            "Aderencia_Percentual": st.column_config.NumberColumn("Aderência (%)", format="%.1f"),
+        },
+    )
+
+
+with aba7:
     st.subheader(
         "Análise dos títulos e descrições dos chamados"
     )
@@ -620,6 +710,11 @@ with aba6:
         "Abertura",
         "Situacao",
         "StatusSLA",
+        "nivelsla",
+        "SLA_Meta_Horas",
+        "SLA_Tempo_Medido_Horas",
+        "SLA_Medido_Status",
+        "SLA_Excedido_Horas",
         "Equipe Responsavel",
         "Responsavel",
         "Categoria",
@@ -647,6 +742,18 @@ with aba6:
         width="stretch",
         hide_index=True,
         column_config={
+            "SLA_Meta_Horas": st.column_config.NumberColumn(
+                "Meta SLA (h)",
+                format="%.1f",
+            ),
+            "SLA_Tempo_Medido_Horas": st.column_config.NumberColumn(
+                "Tempo medido SLA (h)",
+                format="%.1f",
+            ),
+            "SLA_Excedido_Horas": st.column_config.NumberColumn(
+                "SLA excedido (h)",
+                format="%.1f",
+            ),
             "Tempo_Resolucao_Horas": st.column_config.NumberColumn(
                 "Resolução (h úteis)",
                 format="%.1f",
