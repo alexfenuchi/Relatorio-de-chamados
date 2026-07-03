@@ -346,9 +346,18 @@ def grafico_aging_backlog(df):
         "Acima de 10 dias",
     ]
 
+    dados = df.copy()
+
+    if "Faixa_Aging" not in dados.columns:
+        dados["Faixa_Aging"] = pd.cut(
+            dados["Idade_Pendente_Dias"],
+            bins=[-float("inf"), 1, 3, 5, 10, float("inf")],
+            labels=ordem,
+        )
+
     dados = (
-        df.loc[~df["Encerrado_Flag"]]
-        .groupby("Faixa_Aging", dropna=False)["N° Chamado"]
+        dados.loc[~dados["Encerrado_Flag"]]
+        .groupby("Faixa_Aging", dropna=False, observed=False)["N° Chamado"]
         .nunique()
         .reindex(ordem, fill_value=0)
         .reset_index(name="Quantidade")
