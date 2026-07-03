@@ -1,6 +1,8 @@
 from io import BytesIO
 import pandas as pd
 
+from src.tratamento import SLA_NIVEIS_HORAS
+
 def _preparar_para_excel(df: pd.DataFrame) -> pd.DataFrame:
     dados = df.copy()
     for coluna in dados.columns:
@@ -59,6 +61,12 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         / (resumo_sla['Dentro_SLA'] + resumo_sla['Fora_SLA']).replace(0, pd.NA)
         * 100
     ).fillna(0)
+    niveis_sla = pd.DataFrame(
+        [
+            {'nivelsla': nivel, 'Meta': f'{horas} horas'}
+            for nivel, horas in SLA_NIVEIS_HORAS.items()
+        ]
+    )
 
     saida = BytesIO()
     with pd.ExcelWriter(saida, engine='xlsxwriter', datetime_format='dd/mm/yyyy hh:mm', date_format='dd/mm/yyyy') as writer:
@@ -67,6 +75,7 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         resumo_problemas.to_excel(writer, index=False, sheet_name='Problemas')
         resumo_lojas.to_excel(writer, index=False, sheet_name='Lojas')
         resumo_sla.to_excel(writer, index=False, sheet_name='Medicao SLA')
+        niveis_sla.to_excel(writer, index=False, sheet_name='NivelSLA')
 
         for nome_aba, dataframe in {
             'Chamados': dados,
@@ -74,6 +83,7 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
             'Problemas': resumo_problemas,
             'Lojas': resumo_lojas,
             'Medicao SLA': resumo_sla,
+            'NivelSLA': niveis_sla,
         }.items():
             worksheet = writer.sheets[nome_aba]
             for indice, coluna in enumerate(dataframe.columns):
