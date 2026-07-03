@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS chamados_n2 (
     descricao TEXT,
     solucao TEXT,
     codigo_solucao TEXT,
+    nivelsla TEXT,
     atualizado_em TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -31,3 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_chamados_abertura ON chamados_n2 (abertura);
 CREATE INDEX IF NOT EXISTS idx_chamados_localizacao ON chamados_n2 (localizacao);
 CREATE INDEX IF NOT EXISTS idx_chamados_problema ON chamados_n2 (problema);
 CREATE INDEX IF NOT EXISTS idx_chamados_situacao ON chamados_n2 (situacao);
+
+
+ALTER TABLE chamados_n2
+ADD COLUMN IF NOT EXISTS nivelsla TEXT;

@@ -35,6 +35,30 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         .nunique().reset_index(name='Quantidade')
         .sort_values('InicioSemana')
     )
+    resumo_sla = (
+        dados.groupby('nivelsla', dropna=False)
+        .agg(
+            Meta_Horas=('SLA_Meta_Horas', 'first'),
+            Quantidade=('N° Chamado', 'nunique'),
+            Dentro_SLA=(
+                'SLA_Medido_Status',
+                lambda valores: (valores == 'Dentro do SLA').sum(),
+            ),
+            Fora_SLA=(
+                'SLA_Medido_Status',
+                lambda valores: (valores == 'Fora do SLA').sum(),
+            ),
+            Tempo_Medio_Medido_Horas=('SLA_Tempo_Medido_Horas', 'mean'),
+            Excedido_Medio_Horas=('SLA_Excedido_Horas', 'mean'),
+        )
+        .reset_index()
+        .sort_values('nivelsla', na_position='last')
+    )
+    resumo_sla['Aderencia_Percentual'] = (
+        resumo_sla['Dentro_SLA']
+        / (resumo_sla['Dentro_SLA'] + resumo_sla['Fora_SLA']).replace(0, pd.NA)
+        * 100
+    ).fillna(0)
 
     saida = BytesIO()
     with pd.ExcelWriter(saida, engine='xlsxwriter', datetime_format='dd/mm/yyyy hh:mm', date_format='dd/mm/yyyy') as writer:
@@ -42,12 +66,14 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         resumo_semanal.to_excel(writer, index=False, sheet_name='Semanal')
         resumo_problemas.to_excel(writer, index=False, sheet_name='Problemas')
         resumo_lojas.to_excel(writer, index=False, sheet_name='Lojas')
+        resumo_sla.to_excel(writer, index=False, sheet_name='Medicao SLA')
 
         for nome_aba, dataframe in {
             'Chamados': dados,
             'Semanal': resumo_semanal,
             'Problemas': resumo_problemas,
             'Lojas': resumo_lojas,
+            'Medicao SLA': resumo_sla,
         }.items():
             worksheet = writer.sheets[nome_aba]
             for indice, coluna in enumerate(dataframe.columns):

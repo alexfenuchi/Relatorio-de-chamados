@@ -58,6 +58,11 @@ def renderizar_filtros(df):
         _opcoes(df, "StatusSLA"),
     )
 
+    niveis_sla = st.sidebar.multiselect(
+        "Nível SLA",
+        _opcoes(df, "nivelsla"),
+    )
+
     return {
         "periodo": periodo,
         "grupos": grupos,
@@ -66,6 +71,7 @@ def renderizar_filtros(df):
         "status": status,
         "responsaveis": responsaveis,
         "sla": sla,
+        "niveis_sla": niveis_sla,
     }
 
 
@@ -86,6 +92,7 @@ def aplicar_filtros(df, filtros):
         "status": "Situacao",
         "responsaveis": "Responsavel",
         "sla": "StatusSLA",
+        "niveis_sla": "nivelsla",
     }
 
     for chave, coluna in mapas.items():
