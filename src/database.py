@@ -12,12 +12,53 @@ from supabase import Client, create_client
 
 
 NOME_TABELA = "chamados_n2"
-TAMANHO_PAGINA = 1000
-TAMANHO_LOTE = 300
+TAMANHO_PAGINA = 500
+TAMANHO_LOTE = 100
+COLUNAS_CHAMADOS = (
+    "numero_chamado,titulo,prioridade,tipo_chamado,tipo_localizacao,"
+    "localizacao,abertura,situacao,status_sla,equipe_responsavel,"
+    "responsavel,categoria,produto,problema,encerramento,descricao,"
+    "solucao,codigo_solucao,nivelsla,atualizado_em"
+)
 
 
 class SchemaSupabaseDesatualizadoError(RuntimeError):
     """Erro amigável para quando o Supabase não reconhece uma coluna."""
+
+
+class SupabaseMemoriaIndisponivelError(RuntimeError):
+    """Erro amigável para falhas temporárias de memória no Supabase."""
+
+
+def _erro_memoria_supabase(erro: Exception) -> bool:
+    mensagem = str(erro).lower()
+
+    return (
+        "oom command not allowed" in mensagem
+        or "used memory > 'maxmemory'" in mensagem
+        or "failed to fetch permissions" in mensagem
+    )
+
+
+def _mensagem_memoria_supabase() -> str:
+    return (
+        "O Supabase recusou a operação por falta temporária de memória "
+        "(OOM/maxmemory) ao carregar permissões. Aguarde alguns minutos e "
+        "tente novamente. Se o problema persistir, reduza o tamanho da base "
+        "enviada ou aumente o plano/limite de memória do projeto Supabase."
+    )
+
+
+def _executar_supabase_consulta(consulta):
+    try:
+        return consulta.execute()
+    except Exception as erro:
+        if _erro_memoria_supabase(erro):
+            raise SupabaseMemoriaIndisponivelError(
+                _mensagem_memoria_supabase()
+            ) from erro
+
+        raise
 
 
 def _erro_coluna_schema_cache(erro: APIError, coluna: str) -> bool:
@@ -80,12 +121,12 @@ def obter_supabase() -> Client:
 def testar_conexao() -> int:
     supabase = obter_supabase()
 
-    resposta = (
+    consulta = (
         supabase.table(NOME_TABELA)
         .select("numero_chamado", count="exact")
         .limit(1)
-        .execute()
     )
+    resposta = _executar_supabase_consulta(consulta)
 
     return int(resposta.count or 0)
 
@@ -96,13 +137,13 @@ def buscar_chamados() -> pd.DataFrame:
     inicio = 0
 
     while True:
-        resposta = (
+        consulta = (
             supabase.table(NOME_TABELA)
-            .select("*")
+            .select(COLUNAS_CHAMADOS)
             .order("abertura", desc=False)
             .range(inicio, inicio + TAMANHO_PAGINA - 1)
-            .execute()
         )
+        resposta = _executar_supabase_consulta(consulta)
 
         pagina = resposta.data or []
 
@@ -269,14 +310,14 @@ def atualizar_chamados(df: pd.DataFrame) -> int:
         lote = registros[inicio:inicio + TAMANHO_LOTE]
 
         try:
-            (
+            consulta = (
                 supabase.table(NOME_TABELA)
                 .upsert(
                     lote,
                     on_conflict="numero_chamado",
                 )
-                .execute()
             )
+            _executar_supabase_consulta(consulta)
         except APIError as erro:
             if _erro_coluna_schema_cache(erro, "nivelsla"):
                 raise SchemaSupabaseDesatualizadoError(
