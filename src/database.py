@@ -6,6 +6,7 @@ import math
 
 import numpy as np
 import pandas as pd
+from postgrest.exceptions import APIError
 import streamlit as st
 from supabase import Client, create_client
 
@@ -13,6 +14,28 @@ from supabase import Client, create_client
 NOME_TABELA = "chamados_n2"
 TAMANHO_PAGINA = 1000
 TAMANHO_LOTE = 300
+
+
+class SchemaSupabaseDesatualizadoError(RuntimeError):
+    """Erro amigável para quando o Supabase não reconhece uma coluna."""
+
+
+def _erro_coluna_schema_cache(erro: APIError, coluna: str) -> bool:
+    mensagem = str(getattr(erro, "message", ""))
+    codigo = getattr(erro, "code", None)
+
+    return codigo == "PGRST204" and f"'{coluna}' column" in mensagem
+
+
+def _mensagem_coluna_nivelsla_ausente() -> str:
+    return (
+        "A coluna 'nivelsla' não foi encontrada na tabela 'chamados_n2' "
+        "do Supabase. Abra o SQL Editor do Supabase, execute `ALTER TABLE "
+        "public.chamados_n2 ADD COLUMN IF NOT EXISTS nivelsla TEXT;` e, "
+        "se a coluna acabou de ser criada, recarregue o schema cache em "
+        "Database > API > Reload schema. Depois tente atualizar a base "
+        "novamente."
+    )
 
 
 def _normalizar_url_supabase(valor: str) -> str:
@@ -245,13 +268,21 @@ def atualizar_chamados(df: pd.DataFrame) -> int:
     for inicio in range(0, len(registros), TAMANHO_LOTE):
         lote = registros[inicio:inicio + TAMANHO_LOTE]
 
-        (
-            supabase.table(NOME_TABELA)
-            .upsert(
-                lote,
-                on_conflict="numero_chamado",
+        try:
+            (
+                supabase.table(NOME_TABELA)
+                .upsert(
+                    lote,
+                    on_conflict="numero_chamado",
+                )
+                .execute()
             )
-            .execute()
-        )
+        except APIError as erro:
+            if _erro_coluna_schema_cache(erro, "nivelsla"):
+                raise SchemaSupabaseDesatualizadoError(
+                    _mensagem_coluna_nivelsla_ausente()
+                ) from erro
+
+            raise
 
     return len(registros)
