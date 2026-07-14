@@ -1,5 +1,6 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from src.database import buscar_chamados, atualizar_chamados
@@ -78,9 +79,7 @@ def grafico_percentual_sla_por_nivel(df):
         }
     )
     resumo["Percentual_Dentro"] = (
-        resumo["Dentro"]
-        / resumo["Chamados_Medidos"].replace(0, pd.NA)
-        * 100
+        resumo["Dentro"] / resumo["Chamados_Medidos"].replace(0, pd.NA) * 100
     ).fillna(0)
     resumo = resumo[resumo["Chamados_Medidos"] > 0].sort_values("Percentual_Dentro")
 
@@ -113,8 +112,6 @@ def grafico_percentual_sla_por_nivel(df):
     return figura
 
 
-
-
 def _formatar_periodo_filtrado(df):
     datas = df["Abertura"].dropna()
     if datas.empty:
@@ -127,6 +124,255 @@ def _formatar_periodo_filtrado(df):
     return f"{inicio} a {fim}"
 
 
+def _rotulo_mes_periodo(periodo):
+    meses = {
+        1: "jan",
+        2: "fev",
+        3: "mar",
+        4: "abr",
+        5: "mai",
+        6: "jun",
+        7: "jul",
+        8: "ago",
+        9: "set",
+        10: "out",
+        11: "nov",
+        12: "dez",
+    }
+    return f"{meses[periodo.month]}-{str(periodo.year)[-2:]}"
+
+
+def _tipo_operacional(df):
+    tipo = df.get("Tipo do Chamado", pd.Series(index=df.index, dtype="object"))
+    tipo_normalizado = tipo.fillna("").astype(str).str.lower()
+    return tipo_normalizado.str.contains("requi", regex=False).map(
+        {True: "Requisição", False: "Incidente"}
+    )
+
+
+def _calcular_resumo_mensal_recorte(df_recorte):
+    dados = df_recorte.dropna(subset=["Abertura"]).copy()
+    if dados.empty:
+        return pd.DataFrame()
+
+    dados["Mes_Periodo"] = dados["Abertura"].dt.to_period("M")
+    dados["Mes_Label"] = dados["Mes_Periodo"].apply(_rotulo_mes_periodo)
+    dados["Tipo_Operacional"] = _tipo_operacional(dados)
+
+    mensal = (
+        dados.groupby(["Mes_Periodo", "Mes_Label", "Tipo_Operacional"])["N° Chamado"]
+        .nunique()
+        .unstack(fill_value=0)
+        .reset_index()
+        .sort_values("Mes_Periodo")
+    )
+
+    for coluna in ["Incidente", "Requisição"]:
+        if coluna not in mensal.columns:
+            mensal[coluna] = 0
+
+    sla_mensal = (
+        dados[
+            dados["SLA_Normalizado"].isin(
+                [
+                    "em dia",
+                    "dentro",
+                    "dentro do prazo",
+                    "em atraso",
+                    "fora",
+                    "fora do prazo",
+                ]
+            )
+        ]
+        .assign(
+            Dentro_SLA=lambda frame: frame["SLA_Normalizado"].isin(
+                ["em dia", "dentro", "dentro do prazo"]
+            )
+        )
+        .groupby("Mes_Periodo")
+        .agg(
+            Chamados_SLA=("N° Chamado", "nunique"),
+            Dentro_SLA=("Dentro_SLA", "sum"),
+        )
+        .reset_index()
+    )
+
+    mensal = mensal.merge(sla_mensal, on="Mes_Periodo", how="left")
+    mensal["Total"] = mensal["Incidente"] + mensal["Requisição"]
+    mensal["SLA_Percentual"] = (
+        mensal["Dentro_SLA"] / mensal["Chamados_SLA"].replace(0, pd.NA) * 100
+    ).fillna(0)
+
+    return mensal
+
+
+def _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte):
+    mensal = _calcular_resumo_mensal_recorte(df_recorte)
+    if mensal.empty:
+        return aplicar_cor_base(px.bar(title="Evolutivo de chamados sem dados"))
+
+    figura = go.Figure()
+    figura.add_bar(
+        x=mensal["Mes_Label"],
+        y=mensal["Incidente"],
+        name="Incidente",
+        marker_color="#6f6764",
+        text=mensal["Incidente"],
+        texttemplate="%{text:.0f}",
+        textposition="inside",
+    )
+    figura.add_bar(
+        x=mensal["Mes_Label"],
+        y=mensal["Requisição"],
+        name="Requisição",
+        marker_color=COR_GRAFICO_PRINCIPAL,
+        text=mensal["Requisição"],
+        texttemplate="%{text:.0f}",
+        textposition="inside",
+    )
+    figura.add_scatter(
+        x=mensal["Mes_Label"],
+        y=mensal["Total"],
+        name="Total",
+        mode="lines+markers+text",
+        line={"color": "#3d3634", "width": 2},
+        marker={"color": "white", "line": {"color": "#3d3634", "width": 1.5}},
+        text=mensal["Total"],
+        textposition="top center",
+        yaxis="y",
+    )
+    figura.add_scatter(
+        x=mensal["Mes_Label"],
+        y=mensal["SLA_Percentual"],
+        name="SLA (%)",
+        mode="lines+markers+text",
+        line={"color": "#111111", "width": 2},
+        marker={"color": "#111111"},
+        text=mensal["SLA_Percentual"].round(0).astype(int).astype(str) + "%",
+        textposition="bottom center",
+        yaxis="y2",
+    )
+
+    figura.update_layout(
+        title=f"EVOLUTIVO DE CHAMADOS - {nome_recorte.upper()}",
+        barmode="stack",
+        height=360,
+        margin={"l": 25, "r": 30, "t": 55, "b": 25},
+        legend={"orientation": "h", "y": 1.15, "x": 0.2},
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        yaxis={"title": "", "rangemode": "tozero", "gridcolor": "#eeeeee"},
+        yaxis2={
+            "title": "",
+            "overlaying": "y",
+            "side": "right",
+            "range": [0, 100],
+            "ticksuffix": "%",
+            "showgrid": False,
+        },
+    )
+    figura.update_xaxes(tickangle=-45)
+    return figura
+
+
+def _calcular_tabela_falhas_periodo(df_recorte, top_n=20):
+    dados = df_recorte.dropna(subset=["Abertura"]).copy()
+    if dados.empty:
+        return pd.DataFrame()
+
+    dados["Mes_Label"] = dados["Abertura"].dt.to_period("M").apply(_rotulo_mes_periodo)
+    ordem_meses = (
+        dados[["Abertura", "Mes_Label"]]
+        .assign(Mes_Periodo=lambda frame: frame["Abertura"].dt.to_period("M"))
+        .sort_values("Mes_Periodo")["Mes_Label"]
+        .drop_duplicates()
+        .tolist()
+    )
+
+    tabela = pd.pivot_table(
+        dados,
+        index="Problema",
+        columns="Mes_Label",
+        values="N° Chamado",
+        aggfunc="nunique",
+        fill_value=0,
+    )
+    tabela = tabela.reindex(columns=ordem_meses, fill_value=0)
+    tabela["Total"] = tabela.sum(axis=1)
+    total_geral = tabela["Total"].sum()
+    tabela["%"] = (tabela["Total"] / total_geral * 100).fillna(0).round(1)
+    tabela = tabela.sort_values("Total", ascending=False).head(top_n).reset_index()
+    return tabela.rename(columns={"Problema": f"TOP {top_n} Categorias"})
+
+
+def _renderizar_cards_recorte(
+    kpis_recorte, percentual_top10, percentual_incidentes, percentual_requisicoes
+):
+    st.markdown(
+        f"""
+        <div class="recorte-kpi-grid">
+            <div class="recorte-kpi-card">
+                <div class="recorte-kpi-value">{kpis_recorte['total']:,}</div>
+                <div class="recorte-kpi-label">Chamados abertos no período</div>
+            </div>
+            <div class="recorte-kpi-card">
+                <div class="recorte-kpi-value">{percentual_top10:.0f}%</div>
+                <div class="recorte-kpi-label">Chamados concentrados nas 10 principais categorias</div>
+            </div>
+            <div class="recorte-kpi-card recorte-kpi-split">
+                <div>
+                    <div class="recorte-kpi-value">{percentual_incidentes:.0f}%</div>
+                    <div class="recorte-kpi-label">Incidentes no período</div>
+                </div>
+                <div>
+                    <div class="recorte-kpi-value">{percentual_requisicoes:.0f}%</div>
+                    <div class="recorte-kpi-label">Requisições no período</div>
+                </div>
+            </div>
+            <div class="recorte-kpi-card recorte-kpi-split">
+                <div>
+                    <div class="recorte-kpi-value">{kpis_recorte['sla_percentual']:.0f}%</div>
+                    <div class="recorte-kpi-label">Cumprimento do SLA</div>
+                </div>
+                <div>
+                    <div class="recorte-kpi-value">{kpis_recorte['tempo_medio_horas']:.1f}</div>
+                    <div class="recorte-kpi-label">MTTR Médio</div>
+                </div>
+            </div>
+        </div>
+        """.replace(",", "."),
+        unsafe_allow_html=True,
+    )
+
+
+def _renderizar_observacoes_recorte(df_recorte, nome_recorte, kpis_recorte):
+    mensal = _calcular_resumo_mensal_recorte(df_recorte)
+    if mensal.empty:
+        st.info("Sem dados mensais para observações.")
+        return
+
+    ultimos = mensal.tail(2)
+    linhas_meses = "".join(
+        f"<li>{linha['Mes_Label']}: <strong>{int(linha['Total']):,}</strong> chamados</li>"
+        for _, linha in ultimos.iterrows()
+    ).replace(",", ".")
+
+    st.markdown(
+        f"""
+        <div class="recorte-panel recorte-observacoes">
+            <strong>OBSERVAÇÕES</strong>
+            <ul>
+                <li><strong>Chamados por {nome_recorte}</strong><ul>{linhas_meses}</ul></li>
+                <li>Sustentação de {kpis_recorte['total']:,} chamados no período.</li>
+                <li>Necessidade de evolução em SLA, MTTR e backlog.</li>
+                <li>Prioridade em ofensores recorrentes e maturidade ITSM.</li>
+            </ul>
+        </div>
+        """.replace(",", "."),
+        unsafe_allow_html=True,
+    )
+
+
 def _renderizar_recorte_operacao(df_recorte, nome_recorte):
     if df_recorte.empty:
         st.info(f"Nenhum chamado de {nome_recorte} no período selecionado.")
@@ -134,65 +380,10 @@ def _renderizar_recorte_operacao(df_recorte, nome_recorte):
 
     periodo = _formatar_periodo_filtrado(df_recorte)
     kpis_recorte = calcular_kpis(df_recorte)
-
-    st.subheader(f"Saúde da Operação - Recorte {nome_recorte}")
-    st.caption(
-        "Indicadores calculados conforme os filtros da barra lateral, "
-        f"considerando o período {periodo}."
-    )
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric(
-        "Chamados abertos no período",
-        f"{kpis_recorte['total']:,}".replace(",", "."),
-    )
-    col2.metric(
-        "Localizações",
-        f"{kpis_recorte['lojas']:,}".replace(",", "."),
-    )
-    col3.metric(
-        "SLA no prazo",
-        f"{kpis_recorte['sla_percentual']:.1f}%",
-    )
-    col4.metric(
-        "MTTR médio",
-        f"{kpis_recorte['tempo_medio_horas']:.1f} h",
-        help="Tempo médio de resolução em horas úteis de 8h.",
-    )
-
-    col5, col6, col7, col8 = st.columns(4)
-    col5.metric(
-        "Incidentes",
-        f"{kpis_recorte['total']:,}".replace(",", "."),
-        help="Quantidade de chamados únicos no recorte filtrado.",
-    )
-    col6.metric(
-        "Requisições",
-        f"{df_recorte['Problema'].nunique():,}".replace(",", "."),
-        help="Quantidade de problemas distintos no recorte filtrado.",
-    )
-    col7.metric(
-        "Backlog",
-        f"{kpis_recorte['pendentes']:,}".replace(",", "."),
-    )
-    col8.metric(
-        "Aging médio",
-        f"{kpis_recorte['aging_medio_dias']:.1f} dias",
-    )
-
-    graf_col1, graf_col2 = st.columns(2)
-    with graf_col1:
-        st.plotly_chart(
-            grafico_evolucao_semanal(df_recorte),
-            width="stretch",
-            key=f"grafico_recorte_{nome_recorte.lower()}_evolucao",
-        )
-    with graf_col2:
-        st.plotly_chart(
-            grafico_top_problemas(df_recorte, top_n=20),
-            width="stretch",
-            key=f"grafico_recorte_{nome_recorte.lower()}_problemas",
-        )
+    tipos = _tipo_operacional(df_recorte)
+    total_chamados = max(kpis_recorte["total"], 1)
+    percentual_incidentes = (tipos.eq("Incidente").sum() / total_chamados) * 100
+    percentual_requisicoes = (tipos.eq("Requisição").sum() / total_chamados) * 100
 
     resumo_problemas = (
         df_recorte.groupby("Problema", dropna=False)["N° Chamado"]
@@ -200,42 +391,83 @@ def _renderizar_recorte_operacao(df_recorte, nome_recorte):
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
     )
-    resumo_problemas["Percentual"] = (
-        resumo_problemas["Quantidade"]
+    percentual_top10 = (
+        resumo_problemas.head(10)["Quantidade"].sum()
         / resumo_problemas["Quantidade"].sum()
         * 100
-    ).round(1)
-
-    st.subheader("Principais falhas do período filtrado")
-    st.dataframe(
-        resumo_problemas.head(20),
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "Percentual": st.column_config.NumberColumn("%", format="%.1f%%"),
-        },
     )
 
-    st.subheader("Chamados por localização")
-    resumo_localizacoes = (
-        df_recorte.groupby("Localizacao", dropna=False)
-        .agg(
-            Chamados=("N° Chamado", "nunique"),
-            Problemas_Distintos=("Problema", "nunique"),
-            Pendentes=("Encerrado_Flag", lambda valores: (~valores).sum()),
-            MTTR_Horas=("Tempo_Resolucao_Horas", "mean"),
+    st.markdown(
+        f"<span class='recorte-eyebrow'>• Indicadores {nome_recorte}</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<h2 class='recorte-title'>Saúde da Operação – Recorte {nome_recorte}</h2>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<div class='recorte-periodo'>Período filtrado: {periodo}</div>",
+        unsafe_allow_html=True,
+    )
+
+    _renderizar_cards_recorte(
+        kpis_recorte,
+        percentual_top10,
+        percentual_incidentes,
+        percentual_requisicoes,
+    )
+
+    col_grafico, col_tabela = st.columns([1.05, 0.95])
+    with col_grafico:
+        st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
+        st.plotly_chart(
+            _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte),
+            width="stretch",
+            key=f"grafico_recorte_{nome_recorte.lower()}_evolutivo_formato",
         )
-        .reset_index()
-        .sort_values("Chamados", ascending=False)
-    )
-    st.dataframe(
-        resumo_localizacoes,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "MTTR_Horas": st.column_config.NumberColumn("MTTR (h)", format="%.1f"),
-        },
-    )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_tabela:
+        st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
+        st.subheader("Principais falhas do período")
+        tabela_falhas = _calcular_tabela_falhas_periodo(df_recorte)
+        st.dataframe(
+            tabela_falhas,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "%": st.column_config.NumberColumn("%", format="%.1f%%"),
+            },
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    col_observacoes, col_localizacao = st.columns([1.05, 0.95])
+    with col_observacoes:
+        _renderizar_observacoes_recorte(df_recorte, nome_recorte, kpis_recorte)
+
+    with col_localizacao:
+        resumo_localizacoes = (
+            df_recorte.groupby("Localizacao", dropna=False)
+            .agg(
+                Chamados=("N° Chamado", "nunique"),
+                Problemas_Distintos=("Problema", "nunique"),
+                Pendentes=("Encerrado_Flag", lambda valores: (~valores).sum()),
+                MTTR_Horas=("Tempo_Resolucao_Horas", "mean"),
+            )
+            .reset_index()
+            .sort_values("Chamados", ascending=False)
+        )
+        st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
+        st.subheader("Chamados por localização")
+        st.dataframe(
+            resumo_localizacoes.head(20),
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "MTTR_Horas": st.column_config.NumberColumn("MTTR (h)", format="%.1f"),
+            },
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 st.set_page_config(
@@ -312,6 +544,86 @@ st.markdown(
         border-radius: 18px;
         box-shadow: 0 16px 40px rgba(44, 38, 35, 0.06);
         padding: .35rem;
+    }
+
+    .recorte-eyebrow {
+        color: var(--muted);
+        font-size: .95rem;
+        font-weight: 700;
+    }
+
+    .recorte-title {
+        color: #221f20;
+        font-size: 2.2rem;
+        font-weight: 900;
+        margin: .1rem 0 .15rem 0;
+        border-bottom: 7px solid rgba(255, 127, 102, .72);
+        padding-bottom: .35rem;
+        box-shadow: 0 6px 4px -5px rgba(44, 38, 35, .6);
+    }
+
+    .recorte-periodo {
+        color: var(--muted);
+        font-size: .92rem;
+        margin-bottom: 1rem;
+    }
+
+    .recorte-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+        margin: 1.15rem 0 1.35rem;
+    }
+
+    .recorte-kpi-card {
+        background: rgba(255, 255, 255, .92);
+        border: 1px solid rgba(108, 86, 78, .16);
+        border-left: 7px solid var(--accent);
+        border-radius: 16px;
+        box-shadow: 0 8px 12px rgba(44, 38, 35, .18);
+        min-height: 86px;
+        padding: 1.05rem 1.1rem .85rem;
+    }
+
+    .recorte-kpi-split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .recorte-kpi-value {
+        color: #221f20;
+        font-size: 2rem;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .recorte-kpi-label {
+        color: var(--muted);
+        font-size: .82rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-top: .45rem;
+    }
+
+    .recorte-panel {
+        background: rgba(255, 255, 255, .94);
+        border: 1px solid rgba(108, 86, 78, .16);
+        border-radius: 32px;
+        box-shadow: 0 8px 12px rgba(44, 38, 35, .16);
+        padding: 1.1rem 1.2rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .recorte-observacoes {
+        min-height: 260px;
+        font-size: .98rem;
+    }
+
+    @media (max-width: 1100px) {
+        .recorte-kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
     .block-container {
