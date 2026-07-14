@@ -345,34 +345,6 @@ def _renderizar_cards_recorte(
     )
 
 
-def _renderizar_observacoes_recorte(df_recorte, nome_recorte, kpis_recorte):
-    mensal = _calcular_resumo_mensal_recorte(df_recorte)
-    if mensal.empty:
-        st.info("Sem dados mensais para observações.")
-        return
-
-    ultimos = mensal.tail(2)
-    linhas_meses = "".join(
-        f"<li>{linha['Mes_Label']}: <strong>{int(linha['Total']):,}</strong> chamados</li>"
-        for _, linha in ultimos.iterrows()
-    ).replace(",", ".")
-
-    st.markdown(
-        f"""
-        <div class="recorte-panel recorte-observacoes">
-            <strong>OBSERVAÇÕES</strong>
-            <ul>
-                <li><strong>Chamados por {nome_recorte}</strong><ul>{linhas_meses}</ul></li>
-                <li>Sustentação de {kpis_recorte['total']:,} chamados no período.</li>
-                <li>Necessidade de evolução em SLA, MTTR e backlog.</li>
-                <li>Prioridade em ofensores recorrentes e maturidade ITSM.</li>
-            </ul>
-        </div>
-        """.replace(",", "."),
-        unsafe_allow_html=True,
-    )
-
-
 def _renderizar_recorte_operacao(df_recorte, nome_recorte):
     if df_recorte.empty:
         st.info(f"Nenhum chamado de {nome_recorte} no período selecionado.")
@@ -441,33 +413,28 @@ def _renderizar_recorte_operacao(df_recorte, nome_recorte):
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    col_observacoes, col_localizacao = st.columns([1.05, 0.95])
-    with col_observacoes:
-        _renderizar_observacoes_recorte(df_recorte, nome_recorte, kpis_recorte)
-
-    with col_localizacao:
-        resumo_localizacoes = (
-            df_recorte.groupby("Localizacao", dropna=False)
-            .agg(
-                Chamados=("N° Chamado", "nunique"),
-                Problemas_Distintos=("Problema", "nunique"),
-                Pendentes=("Encerrado_Flag", lambda valores: (~valores).sum()),
-                MTTR_Horas=("Tempo_Resolucao_Horas", "mean"),
-            )
-            .reset_index()
-            .sort_values("Chamados", ascending=False)
+    resumo_localizacoes = (
+        df_recorte.groupby("Localizacao", dropna=False)
+        .agg(
+            Chamados=("N° Chamado", "nunique"),
+            Problemas_Distintos=("Problema", "nunique"),
+            Pendentes=("Encerrado_Flag", lambda valores: (~valores).sum()),
+            MTTR_Horas=("Tempo_Resolucao_Horas", "mean"),
         )
-        st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
-        st.subheader("Chamados por localização")
-        st.dataframe(
-            resumo_localizacoes.head(20),
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "MTTR_Horas": st.column_config.NumberColumn("MTTR (h)", format="%.1f"),
-            },
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        .reset_index()
+        .sort_values("Chamados", ascending=False)
+    )
+    st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
+    st.subheader("Chamados por localização")
+    st.dataframe(
+        resumo_localizacoes.head(20),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "MTTR_Horas": st.column_config.NumberColumn("MTTR (h)", format="%.1f"),
+        },
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 st.set_page_config(
@@ -615,10 +582,6 @@ st.markdown(
         margin-bottom: 1.1rem;
     }
 
-    .recorte-observacoes {
-        min-height: 260px;
-        font-size: .98rem;
-    }
 
     @media (max-width: 1100px) {
         .recorte-kpi-grid {
