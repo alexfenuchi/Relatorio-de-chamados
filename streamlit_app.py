@@ -427,8 +427,9 @@ d2.metric(
     f"{kpis['encerrados_hoje']:,}".replace(",", "."),
 )
 d3.metric(
-    "Fora do SLA medido",
-    f"{kpis['fora_sla_medido']:,}".replace(",", "."),
+    "Chamados em atraso",
+    f"{kpis['fora_sla']:,}".replace(",", "."),
+    help="Contagem baseada no StatusSLA da base de origem.",
 )
 d4.metric(
     "Próximos de vencer",
@@ -830,17 +831,17 @@ with aba6:
         sla_classificados["SLA_Medido_Status"] == "Dentro do SLA",
         "N° Chamado",
     ].nunique()
-    fora_medido = sla_classificados.loc[
-        sla_classificados["SLA_Medido_Status"] == "Fora do SLA",
-        "N° Chamado",
-    ].nunique()
     percentual_medido = dentro_medido / total_medido * 100 if total_medido else 0
 
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Total de chamados", f"{kpis['total']:,}".replace(",", "."))
     m2.metric("Chamados medidos", f"{total_medido:,}".replace(",", "."))
     m3.metric("Dentro do SLA", f"{dentro_medido:,}".replace(",", "."))
-    m4.metric("Fora do SLA", f"{fora_medido:,}".replace(",", "."))
+    m4.metric(
+        "Chamados em atraso",
+        f"{kpis['fora_sla']:,}".replace(",", "."),
+        help="Contagem baseada no StatusSLA da base de origem.",
+    )
     m5.metric("Aderência", f"{percentual_medido:.1f}%")
 
     col1, col2 = st.columns(2)
