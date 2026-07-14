@@ -333,34 +333,8 @@ def preparar_base(df):
         dados["Idade_Pendente_Horas"] / 8
     )
 
-    dados["Faixa_Aging"] = np.select(
-        [
-            dados["Idade_Pendente_Dias"].le(1),
-            dados["Idade_Pendente_Dias"].between(
-                1,
-                3,
-                inclusive="right",
-            ),
-            dados["Idade_Pendente_Dias"].between(
-                3,
-                5,
-                inclusive="right",
-            ),
-            dados["Idade_Pendente_Dias"].between(
-                5,
-                10,
-                inclusive="right",
-            ),
-            dados["Idade_Pendente_Dias"].gt(10),
-        ],
-        [
-            "Até 1 dia",
-            "2 a 3 dias",
-            "4 a 5 dias",
-            "6 a 10 dias",
-            "Acima de 10 dias",
-        ],
-        default=None,
+    dados["Faixa_Aging"] = dados["Idade_Pendente_Horas"].apply(
+        _faixa_aging
     )
 
     dados["SLA_Meta_Horas"] = dados["nivelsla"].map(SLA_NIVEIS_HORAS)

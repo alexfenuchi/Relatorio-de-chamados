@@ -60,9 +60,7 @@ def grafico_sla_por_nivel(df):
 
 
 def grafico_percentual_sla_por_nivel(df):
-    dados = df[
-        df["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])
-    ].copy()
+    dados = df[df["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])].copy()
 
     if dados.empty:
         return px.bar(title="Percentual de SLA por nível sem dados classificados")
@@ -107,6 +105,180 @@ def grafico_percentual_sla_por_nivel(df):
     figura.update_xaxes(range=[0, 100])
 
     return figura
+
+
+def _formatar_inteiro(valor):
+    return f"{int(valor):,}".replace(",", ".")
+
+
+def _formatar_decimal(valor, casas=1):
+    if pd.isna(valor):
+        valor = 0
+    return f"{float(valor):.{casas}f}".replace(".", ",")
+
+
+def _base_recorte_lojas(df):
+    dados = df.copy()
+
+    if "TipoLocalizacao" in dados.columns:
+        lojas = dados[
+            dados["TipoLocalizacao"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains("loja", na=False)
+        ]
+        if not lojas.empty:
+            dados = lojas
+
+    return dados
+
+
+def _resumo_ultimos_meses(df, meses=14):
+    dados = df.dropna(subset=["Abertura"]).copy()
+
+    if dados.empty:
+        return pd.DataFrame()
+
+    dados["Mes"] = dados["Abertura"].dt.to_period("M").dt.to_timestamp()
+    meses_validos = sorted(dados["Mes"].dropna().unique())[-meses:]
+    dados = dados[dados["Mes"].isin(meses_validos)]
+
+    resumo = (
+        dados.groupby("Mes")
+        .agg(
+            Incidente=(
+                "N° Chamado",
+                lambda valores: dados.loc[valores.index, "Tipo do Chamado"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains("incidente")
+                .sum(),
+            ),
+            Requisicao=(
+                "N° Chamado",
+                lambda valores: dados.loc[valores.index, "Tipo do Chamado"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                .str.contains("requisi")
+                .sum(),
+            ),
+            Total=("N° Chamado", "nunique"),
+            Dentro_SLA=(
+                "SLA_Medido_Status",
+                lambda valores: (valores == "Dentro do SLA").sum(),
+            ),
+            Medidos=(
+                "SLA_Medido_Status",
+                lambda valores: valores.isin(["Dentro do SLA", "Fora do SLA"]).sum(),
+            ),
+        )
+        .reset_index()
+        .sort_values("Mes")
+    )
+    resumo["SLA (%)"] = (
+        resumo["Dentro_SLA"] / resumo["Medidos"].replace(0, pd.NA) * 100
+    ).fillna(0)
+    resumo["Mes_Label"] = resumo["Mes"].dt.strftime("%b-%y").str.lower()
+
+    return resumo
+
+
+def grafico_evolutivo_lojas(df):
+    resumo = _resumo_ultimos_meses(df)
+
+    if resumo.empty:
+        return px.bar(title="Evolutivo de chamados sem dados")
+
+    barras = resumo.melt(
+        id_vars=["Mes", "Mes_Label", "Total", "SLA (%)"],
+        value_vars=["Incidente", "Requisicao"],
+        var_name="Tipo",
+        value_name="Quantidade",
+    )
+
+    figura = px.bar(
+        barras,
+        x="Mes_Label",
+        y="Quantidade",
+        color="Tipo",
+        text="Quantidade",
+        title="Evolutivo de chamados",
+        barmode="stack",
+        color_discrete_map={"Incidente": "#7d7474", "Requisicao": "#ff9f87"},
+    )
+
+    figura.add_scatter(
+        x=resumo["Mes_Label"],
+        y=resumo["Total"],
+        mode="lines+markers+text",
+        name="Total",
+        text=resumo["Total"],
+        textposition="top center",
+        line={"color": "#222222"},
+        yaxis="y",
+    )
+    figura.add_scatter(
+        x=resumo["Mes_Label"],
+        y=resumo["SLA (%)"],
+        mode="lines+markers+text",
+        name="SLA (%)",
+        text=resumo["SLA (%)"].round(0).astype(int).astype(str) + "%",
+        textposition="bottom center",
+        line={"color": "#111111", "dash": "dot"},
+        yaxis="y2",
+    )
+    figura.update_layout(
+        xaxis_title="",
+        yaxis_title="Chamados",
+        yaxis2={
+            "title": "SLA (%)",
+            "overlaying": "y",
+            "side": "right",
+            "range": [0, 100],
+        },
+        legend_title="",
+    )
+
+    return figura
+
+
+def _principais_falhas_trimestre(df, top_n=20):
+    dados = df.dropna(subset=["Abertura"]).copy()
+
+    if dados.empty:
+        return pd.DataFrame()
+
+    dados["Mes"] = dados["Abertura"].dt.to_period("M").dt.to_timestamp()
+    ultimos_meses = sorted(dados["Mes"].dropna().unique())[-3:]
+    dados = dados[dados["Mes"].isin(ultimos_meses)]
+    dados["Falha"] = (
+        dados["Produto"].fillna("Sem produto").astype(str)
+        + " - "
+        + dados["Problema"].fillna("Sem problema").astype(str)
+    )
+
+    tabela = pd.pivot_table(
+        dados,
+        values="N° Chamado",
+        index="Falha",
+        columns="Mes",
+        aggfunc=pd.Series.nunique,
+        fill_value=0,
+    )
+    tabela["Total"] = tabela.sum(axis=1)
+    tabela = tabela.sort_values("Total", ascending=False).head(top_n)
+    total_trimestre = tabela["Total"].sum()
+    tabela["%"] = tabela["Total"] / total_trimestre * 100 if total_trimestre else 0
+    tabela = tabela.reset_index()
+    tabela.columns = [
+        coluna.strftime("%b-%y").lower() if isinstance(coluna, pd.Timestamp) else coluna
+        for coluna in tabela.columns
+    ]
+
+    return tabela
 
 
 st.set_page_config(
@@ -195,8 +367,9 @@ if pagina == "Atualizar base":
             st.cache_data.clear()
 
             st.success(
-                f"{quantidade:,} chamados foram atualizados com sucesso."
-                .replace(",", ".")
+                f"{quantidade:,} chamados foram atualizados com sucesso.".replace(
+                    ",", "."
+                )
             )
         except Exception as erro:
             st.error(f"Erro ao atualizar o Supabase: {erro}")
@@ -264,9 +437,7 @@ except Exception as erro:
     st.stop()
 
 
-st.success(
-    f"Base consultada: {len(df):,} chamados".replace(",", ".")
-)
+st.success(f"Base consultada: {len(df):,} chamados".replace(",", "."))
 
 if st.sidebar.button(
     "Atualizar dados agora",
@@ -280,9 +451,7 @@ filtros = renderizar_filtros(df)
 df_filtrado = aplicar_filtros(df, filtros)
 
 if df_filtrado.empty:
-    st.warning(
-        "Nenhum chamado encontrado para os filtros selecionados."
-    )
+    st.warning("Nenhum chamado encontrado para os filtros selecionados.")
     st.stop()
 
 
@@ -303,8 +472,17 @@ c3.metric(
     f"{kpis['pendentes']:,}".replace(",", "."),
 )
 c4.metric(
-    "SLA dentro do prazo",
-    f"{kpis['sla_percentual']:.1f}%",
+    "SLA medido no prazo",
+    f"{kpis['sla_medido_percentual']:.1f}%",
+    help=(
+        "Indicador recalculado pelo dashboard com base no nível SLA, "
+        "tempo útil de resolução dos encerrados e aging dos pendentes."
+    ),
+)
+
+st.caption(
+    "SLA principal recalculado pelo dashboard. A aba 'SLA e backlog' "
+    "também mantém a visão do StatusSLA recebido da base de origem."
 )
 
 c5, c6, c7, c8 = st.columns(4)
@@ -328,8 +506,27 @@ c8.metric(
     help="Chamado pendente mais antigo, em dias de 8 horas.",
 )
 
+d1, d2, d3, d4 = st.columns(4)
+d1.metric(
+    "Abertos hoje",
+    f"{kpis['abertos_hoje']:,}".replace(",", "."),
+)
+d2.metric(
+    "Encerrados hoje",
+    f"{kpis['encerrados_hoje']:,}".replace(",", "."),
+)
+d3.metric(
+    "Fora do SLA medido",
+    f"{kpis['fora_sla_medido']:,}".replace(",", "."),
+)
+d4.metric(
+    "Próximos de vencer",
+    f"{kpis['proximos_vencer']:,}".replace(",", "."),
+    help="Pendentes dentro da meta, mas com até 2 horas úteis restantes.",
+)
 
-aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
+
+aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8 = st.tabs(
     [
         "Visão geral",
         "Análise semanal",
@@ -337,6 +534,7 @@ aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
         "Lojas e responsáveis",
         "SLA e backlog",
         "Medição SLA",
+        "Saúde Operação - Lojas",
         "Detalhamento",
     ]
 )
@@ -399,12 +597,7 @@ with aba2:
         key="grafico_analise_evolucao_semanal",
     )
 
-    semanas_validas = (
-        df_filtrado["InicioSemana"]
-        .dropna()
-        .sort_values()
-        .unique()
-    )
+    semanas_validas = df_filtrado["InicioSemana"].dropna().sort_values().unique()
 
     if len(semanas_validas) > 0:
         semana_atual = pd.Timestamp(semanas_validas[-1])
@@ -420,11 +613,7 @@ with aba2:
             "N° Chamado",
         ].nunique()
 
-        variacao = (
-            ((atual - anterior) / anterior * 100)
-            if anterior > 0
-            else 0
-        )
+        variacao = ((atual - anterior) / anterior * 100) if anterior > 0 else 0
 
         a1, a2, a3 = st.columns(3)
         a1.metric("Semana mais recente", atual)
@@ -436,14 +625,10 @@ with aba2:
         )
 
         st.caption(
-            "Semana mais recente iniciada em "
-            f"{semana_atual.strftime('%d/%m/%Y')}."
+            "Semana mais recente iniciada em " f"{semana_atual.strftime('%d/%m/%Y')}."
         )
     else:
-        st.info(
-            "Não existem datas válidas para realizar "
-            "a análise semanal."
-        )
+        st.info("Não existem datas válidas para realizar " "a análise semanal.")
 
     st.plotly_chart(
         grafico_sla_semanal(df_filtrado),
@@ -528,9 +713,7 @@ with aba3:
 
     with aba_problemas_nivelsla:
         st.subheader("Metas por nível SLA")
-        st.caption(
-            "Referência usada para medir a coluna nivelsla dos chamados."
-        )
+        st.caption("Referência usada para medir a coluna nivelsla dos chamados.")
 
         niveis_sla = pd.DataFrame(
             [
@@ -636,17 +819,51 @@ with aba5:
             key="grafico_backlog_sla_semanal",
         )
 
-    backlog = (
-        df_filtrado.loc[
-            ~df_filtrado["Encerrado_Flag"]
-        ]
-        .sort_values(
-            "Idade_Pendente_Horas",
-            ascending=False,
-        )
+    backlog = df_filtrado.loc[~df_filtrado["Encerrado_Flag"]].sort_values(
+        "Idade_Pendente_Horas",
+        ascending=False,
     )
 
-    st.subheader("Chamados pendentes mais antigos")
+    st.subheader("Fila de prioridade operacional")
+    st.caption(
+        "Ordenação sugerida para o dia a dia: primeiro chamados fora do SLA "
+        "medido, depois maior aging, prioridade e nível SLA."
+    )
+
+    prioridade_ordem = {
+        "P1": 1,
+        "1": 1,
+        "P2": 2,
+        "2": 2,
+        "P3": 3,
+        "3": 3,
+        "P4": 4,
+        "4": 4,
+        "P5": 5,
+        "5": 5,
+    }
+    backlog_priorizado = backlog.copy()
+    backlog_priorizado["Prioridade_Ordenacao"] = (
+        backlog_priorizado["prioridade"]
+        .fillna("")
+        .astype(str)
+        .str.upper()
+        .str.extract(r"(P?[1-5])", expand=False)
+        .map(prioridade_ordem)
+        .fillna(99)
+    )
+    backlog_priorizado["Fora_SLA_Ordenacao"] = (
+        backlog_priorizado["SLA_Medido_Status"].eq("Fora do SLA").astype(int)
+    )
+    backlog_priorizado = backlog_priorizado.sort_values(
+        [
+            "Fora_SLA_Ordenacao",
+            "Idade_Pendente_Horas",
+            "Prioridade_Ordenacao",
+            "nivelsla",
+        ],
+        ascending=[False, False, True, True],
+    )
 
     colunas_backlog = [
         "N° Chamado",
@@ -661,11 +878,11 @@ with aba5:
     ]
 
     st.dataframe(
-        backlog[
+        backlog_priorizado[
             [
                 coluna
                 for coluna in colunas_backlog
-                if coluna in backlog.columns
+                if coluna in backlog_priorizado.columns
             ]
         ].head(100),
         width="stretch",
@@ -691,10 +908,12 @@ with aba6:
     )
 
     sla_classificados = df_filtrado[
-        df_filtrado["SLA_Medido_Status"].isin([
-            "Dentro do SLA",
-            "Fora do SLA",
-        ])
+        df_filtrado["SLA_Medido_Status"].isin(
+            [
+                "Dentro do SLA",
+                "Fora do SLA",
+            ]
+        )
     ]
     total_medido = sla_classificados["N° Chamado"].nunique()
     dentro_medido = sla_classificados.loc[
@@ -705,11 +924,7 @@ with aba6:
         sla_classificados["SLA_Medido_Status"] == "Fora do SLA",
         "N° Chamado",
     ].nunique()
-    percentual_medido = (
-        dentro_medido / total_medido * 100
-        if total_medido
-        else 0
-    )
+    percentual_medido = dentro_medido / total_medido * 100 if total_medido else 0
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Chamados medidos", f"{total_medido:,}".replace(",", "."))
@@ -762,17 +977,133 @@ with aba6:
         hide_index=True,
         column_config={
             "Meta_Horas": st.column_config.NumberColumn("Meta (h)", format="%.1f"),
-            "Tempo_Medio_Medido_Horas": st.column_config.NumberColumn("Tempo médio medido (h)", format="%.1f"),
-            "Excedido_Medio_Horas": st.column_config.NumberColumn("Excedido médio (h)", format="%.1f"),
-            "Aderencia_Percentual": st.column_config.NumberColumn("Aderência (%)", format="%.1f"),
+            "Tempo_Medio_Medido_Horas": st.column_config.NumberColumn(
+                "Tempo médio medido (h)", format="%.1f"
+            ),
+            "Excedido_Medio_Horas": st.column_config.NumberColumn(
+                "Excedido médio (h)", format="%.1f"
+            ),
+            "Aderencia_Percentual": st.column_config.NumberColumn(
+                "Aderência (%)", format="%.1f"
+            ),
         },
     )
 
 
 with aba7:
-    st.subheader(
-        "Análise dos títulos e descrições dos chamados"
+    st.caption("Indicadores Lojas")
+    st.header("Saúde da Operação – Recorte Lojas")
+
+    df_lojas = _base_recorte_lojas(df_filtrado)
+    kpis_lojas = calcular_kpis(df_lojas)
+    resumo_mensal_lojas = _resumo_ultimos_meses(df_lojas, meses=14)
+
+    total_chamados_lojas = kpis_lojas["total"]
+    total_top_10_categorias = (
+        df_lojas.groupby("Categoria", dropna=False)["N° Chamado"]
+        .nunique()
+        .sort_values(ascending=False)
+        .head(10)
+        .sum()
     )
+    percentual_top_10 = (
+        total_top_10_categorias / total_chamados_lojas * 100
+        if total_chamados_lojas
+        else 0
+    )
+    tipo_chamado_normalizado = (
+        df_lojas["Tipo do Chamado"].fillna("").astype(str).str.lower()
+    )
+    incidentes = df_lojas.loc[
+        tipo_chamado_normalizado.str.contains("incidente", na=False),
+        "N° Chamado",
+    ].nunique()
+    requisicoes = df_lojas.loc[
+        tipo_chamado_normalizado.str.contains("requisi", na=False),
+        "N° Chamado",
+    ].nunique()
+    total_tipo = incidentes + requisicoes
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Chamados abertos no período", _formatar_inteiro(total_chamados_lojas))
+    col2.metric(
+        "Chamados nas 10 principais categorias",
+        f"{percentual_top_10:.0f}%",
+    )
+    col3.metric(
+        "Incidentes / Requisições",
+        (
+            f"{incidentes / total_tipo * 100:.0f}% / "
+            f"{requisicoes / total_tipo * 100:.0f}%"
+            if total_tipo
+            else "0% / 0%"
+        ),
+    )
+    col4.metric(
+        "Cumprimento SLA / MTTR médio",
+        f"{kpis_lojas['sla_medido_percentual']:.0f}% / "
+        f"{_formatar_decimal(kpis_lojas['tempo_medio_horas'], 2)} h",
+    )
+
+    evolucao_col, falhas_col = st.columns([1.05, 0.95])
+
+    with evolucao_col:
+        st.plotly_chart(
+            grafico_evolutivo_lojas(df_lojas),
+            width="stretch",
+            key="grafico_saude_lojas_evolutivo",
+        )
+
+        st.subheader("Observações")
+        if resumo_mensal_lojas.empty:
+            st.info("Não há dados mensais para gerar observações automáticas.")
+        else:
+            ultimos = resumo_mensal_lojas.tail(2)
+            observacoes = []
+            for _, linha in ultimos.iterrows():
+                lojas_mes = df_lojas.loc[
+                    df_lojas["Abertura"].dt.to_period("M").dt.to_timestamp()
+                    == linha["Mes"],
+                    "Localizacao",
+                ].nunique()
+                media_por_loja = linha["Total"] / lojas_mes if lojas_mes else 0
+                observacoes.append(
+                    f"{linha['Mes'].strftime('%B/%Y')}: "
+                    f"{_formatar_inteiro(linha['Total'])} chamados em "
+                    f"{_formatar_inteiro(lojas_mes)} lojas "
+                    f"({_formatar_decimal(media_por_loja, 2)} chamados/loja)."
+                )
+
+            st.markdown(
+                "\n".join(
+                    [
+                        "- **Chamados por loja**",
+                        *[f"  - {item}" for item in observacoes],
+                        f"- Sustentação de {_formatar_inteiro(total_chamados_lojas)} chamados no período filtrado.",
+                        "- Necessidade de evolução contínua em SLA, MTTR e backlog.",
+                        "- Prioridade nos ofensores recorrentes e maturidade ITSM.",
+                    ]
+                )
+            )
+
+    with falhas_col:
+        st.subheader("Principais falhas último trimestre")
+        falhas = _principais_falhas_trimestre(df_lojas, top_n=20)
+        if falhas.empty:
+            st.info("Não há dados suficientes para o último trimestre.")
+        else:
+            st.dataframe(
+                falhas,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "%": st.column_config.NumberColumn("%", format="%.1f%%"),
+                },
+            )
+
+
+with aba8:
+    st.subheader("Análise dos títulos e descrições dos chamados")
 
     col_titulos, col_descricoes = st.columns(2)
 
@@ -845,9 +1176,7 @@ with aba7:
     ]
 
     colunas_exibicao = [
-        coluna
-        for coluna in colunas_exibicao
-        if coluna in df_filtrado.columns
+        coluna for coluna in colunas_exibicao if coluna in df_filtrado.columns
     ]
 
     st.dataframe(
@@ -891,19 +1220,13 @@ with aba7:
         key="preparar_relatorio_excel",
     ):
         try:
-            with st.spinner(
-                "Gerando relatório Excel..."
-            ):
-                excel = gerar_excel_relatorio(
-                    df_filtrado
-                )
+            with st.spinner("Gerando relatório Excel..."):
+                excel = gerar_excel_relatorio(df_filtrado)
 
             st.download_button(
                 "Baixar relatório filtrado em Excel",
                 data=excel,
-                file_name=(
-                    "relatorio_chamados_filtrado.xlsx"
-                ),
+                file_name=("relatorio_chamados_filtrado.xlsx"),
                 mime=(
                     "application/vnd.openxmlformats-officedocument."
                     "spreadsheetml.sheet"
@@ -911,7 +1234,4 @@ with aba7:
                 key="download_relatorio_excel",
             )
         except Exception as erro:
-            st.error(
-                "Não foi possível gerar o relatório Excel: "
-                f"{erro}"
-            )
+            st.error("Não foi possível gerar o relatório Excel: " f"{erro}")
