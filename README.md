@@ -1,6 +1,6 @@
-# Relatório de Chamados — Suporte N2
+# Central de Inteligência de Chamados — Suporte N2
 
-Aplicação em Streamlit para análise da base anual de chamados do Suporte N2.
+Aplicação em Streamlit para análise executiva da base anual de chamados do Suporte N2, com foco em volume, SLA, backlog e ofensores recorrentes.
 
 ## Funcionalidades
 
@@ -10,9 +10,9 @@ Aplicação em Streamlit para análise da base anual de chamados do Suporte N2.
 - Indicadores de chamados encerrados, pendentes e SLA
 - Evolução semanal
 - Top problemas
-- Top lojas
+- Top localizações
 - Análise por responsável
-- Filtros por período, grupo (Loja/CD), loja, problema, status, responsável e SLA
+- Filtros por período, grupo, localização, problema, status, responsável e SLA
 - Exportação do relatório filtrado em Excel
 
 ## Estrutura esperada da base
@@ -72,7 +72,7 @@ git push -u origin main
 - A aba **SLA e backlog** exibe uma fila de prioridade operacional para orientar a ordem de atendimento do dia.
 - O comando de execução local aponta para `streamlit_app.py`, arquivo principal do projeto.
 
-## Observação de segurança
+## Segurança da base
 
 A base Excel está bloqueada no `.gitignore` e não deve ser enviada ao GitHub.
 
@@ -94,5 +94,3 @@ A aba **Detalhamento** possui um gráfico horizontal com as descrições de prob
 - Chamados abertos por dia da semana.
 - Problemas com maior tempo médio de resolução.
 - Lista dos chamados pendentes mais antigos.
-
-**Observação:** feriados ainda não são descontados do cálculo.
