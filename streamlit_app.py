@@ -4,7 +4,7 @@ import streamlit as st
 
 from src.database import buscar_chamados, atualizar_chamados
 from src.leitura import carregar_excel
-from src.tratamento import preparar_base
+from src.tratamento import SLA_NIVEIS_HORAS, preparar_base
 from src.filtros import aplicar_filtros, renderizar_filtros
 from src.metricas import calcular_kpis
 from src.graficos import (
@@ -481,70 +481,100 @@ with aba2:
 
 
 with aba3:
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.plotly_chart(
-            grafico_top_problemas(
-                df_filtrado,
-                top_n=15,
-            ),
-            width="stretch",
-            key="grafico_problemas_top15",
-        )
-
-    with col2:
-        st.plotly_chart(
-            grafico_tempo_medio_problema(
-                df_filtrado,
-                top_n=10,
-            ),
-            width="stretch",
-            key="grafico_problemas_tempo_medio",
-        )
-
-    resumo_problemas = (
-        df_filtrado.groupby(
-            ["Problema", "Produto"],
-            dropna=False,
-        )
-        .agg(
-            Quantidade=("N° Chamado", "nunique"),
-            Pendentes=(
-                "Encerrado_Flag",
-                lambda valores: (~valores).sum(),
-            ),
-            Tempo_Medio_Horas=(
-                "Tempo_Resolucao_Horas",
-                "mean",
-            ),
-            Tempo_Medio_Dias=(
-                "Tempo_Resolucao_Dias",
-                "mean",
-            ),
-        )
-        .reset_index()
-        .sort_values(
-            "Quantidade",
-            ascending=False,
-        )
+    aba_problemas_resumo, aba_problemas_nivelsla = st.tabs(
+        [
+            "Resumo",
+            "Nível SLA",
+        ]
     )
 
-    st.dataframe(
-        resumo_problemas,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "Tempo_Medio_Horas": st.column_config.NumberColumn(
-                "Tempo médio (h)",
-                format="%.1f",
-            ),
-            "Tempo_Medio_Dias": st.column_config.NumberColumn(
-                "Tempo médio (dias de 8h)",
-                format="%.1f",
-            ),
-        },
-    )
+    with aba_problemas_resumo:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.plotly_chart(
+                grafico_top_problemas(
+                    df_filtrado,
+                    top_n=15,
+                ),
+                width="stretch",
+                key="grafico_problemas_top15",
+            )
+
+        with col2:
+            st.plotly_chart(
+                grafico_tempo_medio_problema(
+                    df_filtrado,
+                    top_n=10,
+                ),
+                width="stretch",
+                key="grafico_problemas_tempo_medio",
+            )
+
+        resumo_problemas = (
+            df_filtrado.groupby(
+                ["Problema", "Produto"],
+                dropna=False,
+            )
+            .agg(
+                Quantidade=("N° Chamado", "nunique"),
+                Pendentes=(
+                    "Encerrado_Flag",
+                    lambda valores: (~valores).sum(),
+                ),
+                Tempo_Medio_Horas=(
+                    "Tempo_Resolucao_Horas",
+                    "mean",
+                ),
+                Tempo_Medio_Dias=(
+                    "Tempo_Resolucao_Dias",
+                    "mean",
+                ),
+            )
+            .reset_index()
+            .sort_values(
+                "Quantidade",
+                ascending=False,
+            )
+        )
+
+        st.dataframe(
+            resumo_problemas,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Tempo_Medio_Horas": st.column_config.NumberColumn(
+                    "Tempo médio (h)",
+                    format="%.1f",
+                ),
+                "Tempo_Medio_Dias": st.column_config.NumberColumn(
+                    "Tempo médio (dias de 8h)",
+                    format="%.1f",
+                ),
+            },
+        )
+
+    with aba_problemas_nivelsla:
+        st.subheader("Metas por nível SLA")
+        st.caption(
+            "Referência usada para medir a coluna nivelsla dos chamados."
+        )
+
+        niveis_sla = pd.DataFrame(
+            [
+                {
+                    "nivelsla": nivel,
+                    "Meta": f"{horas} horas",
+                }
+                for nivel, horas in SLA_NIVEIS_HORAS.items()
+            ]
+        )
+
+        st.dataframe(
+            niveis_sla,
+            width="stretch",
+            hide_index=True,
+        )
 
 
 with aba4:
