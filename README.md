@@ -72,7 +72,7 @@ git push -u origin main
 - A aba **SLA e backlog** exibe uma fila de prioridade operacional para orientar a ordem de atendimento do dia.
 - O comando de execução local aponta para `streamlit_app.py`, arquivo principal do projeto.
 
-## Observação de segurança
+## Segurança da base
 
 A base Excel está bloqueada no `.gitignore` e não deve ser enviada ao GitHub.
 
@@ -94,5 +94,3 @@ A aba **Detalhamento** possui um gráfico horizontal com as descrições de prob
 - Chamados abertos por dia da semana.
 - Problemas com maior tempo médio de resolução.
 - Lista dos chamados pendentes mais antigos.
-
-**Observação:** feriados ainda não são descontados do cálculo.
