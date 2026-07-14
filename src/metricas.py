@@ -34,6 +34,48 @@ def calcular_kpis(df):
 
     total_sla_classificado = dentro_sla + fora_sla
 
+    if "SLA_Medido_Status" in df.columns:
+        dentro_sla_medido = df.loc[
+            df["SLA_Medido_Status"].eq("Dentro do SLA"),
+            "N° Chamado",
+        ].nunique()
+        fora_sla_medido = df.loc[
+            df["SLA_Medido_Status"].eq("Fora do SLA"),
+            "N° Chamado",
+        ].nunique()
+    else:
+        dentro_sla_medido = 0
+        fora_sla_medido = 0
+
+    total_sla_medido = dentro_sla_medido + fora_sla_medido
+
+    hoje = pd.Timestamp.now().date()
+    abertos_hoje = df.loc[
+        df["Abertura"].dt.date.eq(hoje),
+        "N° Chamado",
+    ].nunique()
+
+    if "Encerramento" in df.columns:
+        encerrados_hoje = df.loc[
+            df["Encerramento"].notna()
+            & df["Encerramento"].dt.date.eq(hoje),
+            "N° Chamado",
+        ].nunique()
+    else:
+        encerrados_hoje = 0
+
+    proximos_vencer = df.loc[
+        ~df["Encerrado_Flag"]
+        & df["SLA_Excedido_Horas"].eq(0)
+        & df["SLA_Meta_Horas"].notna()
+        & df["SLA_Tempo_Medido_Horas"].notna()
+        & (
+            (df["SLA_Meta_Horas"] - df["SLA_Tempo_Medido_Horas"])
+            <= 2
+        ),
+        "N° Chamado",
+    ].nunique()
+
     tempos = df.loc[
         df["Encerrado_Flag"],
         "Tempo_Resolucao_Horas",
@@ -62,6 +104,16 @@ def calcular_kpis(df):
             if total_sla_classificado
             else 0
         ),
+        "dentro_sla_medido": dentro_sla_medido,
+        "fora_sla_medido": fora_sla_medido,
+        "sla_medido_percentual": (
+            dentro_sla_medido / total_sla_medido * 100
+            if total_sla_medido
+            else 0
+        ),
+        "abertos_hoje": abertos_hoje,
+        "encerrados_hoje": encerrados_hoje,
+        "proximos_vencer": proximos_vencer,
         "tempo_medio_horas": _valor_seguro(tempos.mean()),
         "tempo_mediano_horas": _valor_seguro(tempos.median()),
         "tempo_medio_dias": _valor_seguro(tempos.mean() / 8),
