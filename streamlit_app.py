@@ -383,17 +383,17 @@ c3.metric(
     f"{kpis['pendentes']:,}".replace(",", "."),
 )
 c4.metric(
-    "SLA medido no prazo",
-    f"{kpis['sla_medido_percentual']:.1f}%",
+    "SLA no prazo",
+    f"{kpis['sla_percentual']:.1f}%",
     help=(
-        "Indicador recalculado pelo dashboard com base no nível SLA, "
-        "tempo útil de resolução dos encerrados e aging dos pendentes."
+        "Percentual baseado no StatusSLA da base de origem: "
+        "chamados em dia sobre chamados em dia + em atraso."
     ),
 )
 
 st.caption(
-    "SLA principal recalculado pelo dashboard. A aba 'SLA e backlog' "
-    "também mantém a visão do StatusSLA recebido da base de origem."
+    "SLA principal baseado no StatusSLA recebido da base de origem. "
+    "A aba 'Medição SLA' mantém a visão recalculada pelo dashboard por nível SLA."
 )
 
 c5, c6, c7, c8 = st.columns(4)
@@ -827,22 +827,24 @@ with aba6:
         )
     ]
     total_medido = sla_classificados["N° Chamado"].nunique()
-    dentro_medido = sla_classificados.loc[
-        sla_classificados["SLA_Medido_Status"] == "Dentro do SLA",
-        "N° Chamado",
-    ].nunique()
-    percentual_medido = dentro_medido / total_medido * 100 if total_medido else 0
-
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Total de chamados", f"{kpis['total']:,}".replace(",", "."))
     m2.metric("Chamados medidos", f"{total_medido:,}".replace(",", "."))
-    m3.metric("Dentro do SLA", f"{dentro_medido:,}".replace(",", "."))
+    m3.metric(
+        "Chamados no prazo",
+        f"{kpis['dentro_sla']:,}".replace(",", "."),
+        help="Contagem baseada no StatusSLA da base de origem.",
+    )
     m4.metric(
         "Chamados em atraso",
         f"{kpis['fora_sla']:,}".replace(",", "."),
         help="Contagem baseada no StatusSLA da base de origem.",
     )
-    m5.metric("Aderência", f"{percentual_medido:.1f}%")
+    m5.metric(
+        "SLA no prazo",
+        f"{kpis['sla_percentual']:.1f}%",
+        help="Percentual baseado no StatusSLA da base de origem.",
+    )
 
     col1, col2 = st.columns(2)
     with col1:
