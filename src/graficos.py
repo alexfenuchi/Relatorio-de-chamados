@@ -125,7 +125,7 @@ def grafico_top_lojas(df, top_n=15):
         y="Localizacao",
         orientation="h",
         text="Quantidade",
-        title=f"Top {top_n} lojas com mais chamados",
+        title=f"Top {top_n} localizações com mais chamados",
         color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
