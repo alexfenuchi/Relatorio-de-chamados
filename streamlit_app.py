@@ -113,6 +113,131 @@ def grafico_percentual_sla_por_nivel(df):
     return figura
 
 
+
+
+def _formatar_periodo_filtrado(df):
+    datas = df["Abertura"].dropna()
+    if datas.empty:
+        return "período filtrado"
+
+    inicio = datas.min().strftime("%d/%m/%Y")
+    fim = datas.max().strftime("%d/%m/%Y")
+    if inicio == fim:
+        return inicio
+    return f"{inicio} a {fim}"
+
+
+def _renderizar_recorte_operacao(df_recorte, nome_recorte):
+    if df_recorte.empty:
+        st.info(f"Nenhum chamado de {nome_recorte} no período selecionado.")
+        return
+
+    periodo = _formatar_periodo_filtrado(df_recorte)
+    kpis_recorte = calcular_kpis(df_recorte)
+
+    st.subheader(f"Saúde da Operação - Recorte {nome_recorte}")
+    st.caption(
+        "Indicadores calculados conforme os filtros da barra lateral, "
+        f"considerando o período {periodo}."
+    )
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric(
+        "Chamados abertos no período",
+        f"{kpis_recorte['total']:,}".replace(",", "."),
+    )
+    col2.metric(
+        "Localizações",
+        f"{kpis_recorte['lojas']:,}".replace(",", "."),
+    )
+    col3.metric(
+        "SLA no prazo",
+        f"{kpis_recorte['sla_percentual']:.1f}%",
+    )
+    col4.metric(
+        "MTTR médio",
+        f"{kpis_recorte['tempo_medio_horas']:.1f} h",
+        help="Tempo médio de resolução em horas úteis de 8h.",
+    )
+
+    col5, col6, col7, col8 = st.columns(4)
+    col5.metric(
+        "Incidentes",
+        f"{kpis_recorte['total']:,}".replace(",", "."),
+        help="Quantidade de chamados únicos no recorte filtrado.",
+    )
+    col6.metric(
+        "Requisições",
+        f"{df_recorte['Problema'].nunique():,}".replace(",", "."),
+        help="Quantidade de problemas distintos no recorte filtrado.",
+    )
+    col7.metric(
+        "Backlog",
+        f"{kpis_recorte['pendentes']:,}".replace(",", "."),
+    )
+    col8.metric(
+        "Aging médio",
+        f"{kpis_recorte['aging_medio_dias']:.1f} dias",
+    )
+
+    graf_col1, graf_col2 = st.columns(2)
+    with graf_col1:
+        st.plotly_chart(
+            grafico_evolucao_semanal(df_recorte),
+            width="stretch",
+            key=f"grafico_recorte_{nome_recorte.lower()}_evolucao",
+        )
+    with graf_col2:
+        st.plotly_chart(
+            grafico_top_problemas(df_recorte, top_n=20),
+            width="stretch",
+            key=f"grafico_recorte_{nome_recorte.lower()}_problemas",
+        )
+
+    resumo_problemas = (
+        df_recorte.groupby("Problema", dropna=False)["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+        .sort_values("Quantidade", ascending=False)
+    )
+    resumo_problemas["Percentual"] = (
+        resumo_problemas["Quantidade"]
+        / resumo_problemas["Quantidade"].sum()
+        * 100
+    ).round(1)
+
+    st.subheader("Principais falhas do período filtrado")
+    st.dataframe(
+        resumo_problemas.head(20),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Percentual": st.column_config.NumberColumn("%", format="%.1f%%"),
+        },
+    )
+
+    st.subheader("Chamados por localização")
+    resumo_localizacoes = (
+        df_recorte.groupby("Localizacao", dropna=False)
+        .agg(
+            Chamados=("N° Chamado", "nunique"),
+            Problemas_Distintos=("Problema", "nunique"),
+            Pendentes=("Encerrado_Flag", lambda valores: (~valores).sum()),
+            MTTR_Horas=("Tempo_Resolucao_Horas", "mean"),
+        )
+        .reset_index()
+        .sort_values("Chamados", ascending=False)
+    )
+    st.dataframe(
+        resumo_localizacoes,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "MTTR_Horas": st.column_config.NumberColumn("MTTR (h)", format="%.1f"),
+        },
+    )
+
+
 st.set_page_config(
     page_title="Relatorio de chamados - N2",
     page_icon="📊",
@@ -438,7 +563,7 @@ d4.metric(
 )
 
 
-aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
+aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8, aba9 = st.tabs(
     [
         "Visão geral",
         "Tendência semanal",
@@ -446,6 +571,8 @@ aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
         "Localizações e responsáveis",
         "SLA e backlog",
         "Medição SLA",
+        "Recorte Loja",
+        "Recorte CD",
         "Detalhamento",
     ]
 )
@@ -882,6 +1009,16 @@ with aba6:
 
 
 with aba7:
+    df_loja = df_filtrado[df_filtrado["Grupo_Localizacao"].eq("Loja")]
+    _renderizar_recorte_operacao(df_loja, "Loja")
+
+
+with aba8:
+    df_cd = df_filtrado[df_filtrado["Grupo_Localizacao"].eq("CD")]
+    _renderizar_recorte_operacao(df_cd, "CD")
+
+
+with aba9:
     st.subheader("Análise dos títulos e descrições dos chamados")
 
     col_titulos, col_descricoes = st.columns(2)
