@@ -333,6 +333,10 @@ def preparar_base(df):
         dados["Idade_Pendente_Horas"] / 8
     )
 
+    dados["Faixa_Aging"] = dados["Idade_Pendente_Horas"].apply(
+        _faixa_aging
+    )
+
     dados["SLA_Meta_Horas"] = dados["nivelsla"].map(SLA_NIVEIS_HORAS)
 
     dados["SLA_Tempo_Medido_Horas"] = np.where(

@@ -303,8 +303,17 @@ c3.metric(
     f"{kpis['pendentes']:,}".replace(",", "."),
 )
 c4.metric(
-    "SLA dentro do prazo",
-    f"{kpis['sla_percentual']:.1f}%",
+    "SLA medido no prazo",
+    f"{kpis['sla_medido_percentual']:.1f}%",
+    help=(
+        "Indicador recalculado pelo dashboard com base no nível SLA, "
+        "tempo útil de resolução dos encerrados e aging dos pendentes."
+    ),
+)
+
+st.caption(
+    "SLA principal recalculado pelo dashboard. A aba 'SLA e backlog' "
+    "também mantém a visão do StatusSLA recebido da base de origem."
 )
 
 c5, c6, c7, c8 = st.columns(4)
@@ -326,6 +335,25 @@ c8.metric(
     "Maior aging",
     f"{kpis['aging_maximo_dias']:.1f} dias",
     help="Chamado pendente mais antigo, em dias de 8 horas.",
+)
+
+d1, d2, d3, d4 = st.columns(4)
+d1.metric(
+    "Abertos hoje",
+    f"{kpis['abertos_hoje']:,}".replace(",", "."),
+)
+d2.metric(
+    "Encerrados hoje",
+    f"{kpis['encerrados_hoje']:,}".replace(",", "."),
+)
+d3.metric(
+    "Fora do SLA medido",
+    f"{kpis['fora_sla_medido']:,}".replace(",", "."),
+)
+d4.metric(
+    "Próximos de vencer",
+    f"{kpis['proximos_vencer']:,}".replace(",", "."),
+    help="Pendentes dentro da meta, mas com até 2 horas úteis restantes.",
 )
 
 
@@ -616,7 +644,48 @@ with aba5:
         )
     )
 
-    st.subheader("Chamados pendentes mais antigos")
+    st.subheader("Fila de prioridade operacional")
+    st.caption(
+        "Ordenação sugerida para o dia a dia: primeiro chamados fora do SLA "
+        "medido, depois maior aging, prioridade e nível SLA."
+    )
+
+    prioridade_ordem = {
+        "P1": 1,
+        "1": 1,
+        "P2": 2,
+        "2": 2,
+        "P3": 3,
+        "3": 3,
+        "P4": 4,
+        "4": 4,
+        "P5": 5,
+        "5": 5,
+    }
+    backlog_priorizado = backlog.copy()
+    backlog_priorizado["Prioridade_Ordenacao"] = (
+        backlog_priorizado["prioridade"]
+        .fillna("")
+        .astype(str)
+        .str.upper()
+        .str.extract(r"(P?[1-5])", expand=False)
+        .map(prioridade_ordem)
+        .fillna(99)
+    )
+    backlog_priorizado["Fora_SLA_Ordenacao"] = (
+        backlog_priorizado["SLA_Medido_Status"]
+        .eq("Fora do SLA")
+        .astype(int)
+    )
+    backlog_priorizado = backlog_priorizado.sort_values(
+        [
+            "Fora_SLA_Ordenacao",
+            "Idade_Pendente_Horas",
+            "Prioridade_Ordenacao",
+            "nivelsla",
+        ],
+        ascending=[False, False, True, True],
+    )
 
     colunas_backlog = [
         "N° Chamado",
@@ -631,11 +700,11 @@ with aba5:
     ]
 
     st.dataframe(
-        backlog[
+        backlog_priorizado[
             [
                 coluna
                 for coluna in colunas_backlog
-                if coluna in backlog.columns
+                if coluna in backlog_priorizado.columns
             ]
         ].head(100),
         width="stretch",
