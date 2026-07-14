@@ -21,6 +21,9 @@ from src.graficos import (
     grafico_aberturas_dia_semana,
     grafico_tempo_medio_problema,
     grafico_prioridades,
+    aplicar_cor_base,
+    COR_GRAFICO_PRINCIPAL,
+    COR_GRAFICO_TEXTO,
 )
 from src.exportacao import gerar_excel_relatorio
 
@@ -34,7 +37,9 @@ def grafico_sla_por_nivel(df):
     )
 
     if dados.empty:
-        return px.bar(title="Medição de SLA por nível sem dados classificados")
+        return aplicar_cor_base(
+            px.bar(title="Medição de SLA por nível sem dados classificados")
+        )
 
     figura = px.bar(
         dados,
@@ -45,8 +50,8 @@ def grafico_sla_por_nivel(df):
         barmode="group",
         title="Medição de SLA por nível",
         color_discrete_map={
-            "Dentro do SLA": "#2ca02c",
-            "Fora do SLA": "#d62728",
+            "Dentro do SLA": COR_GRAFICO_PRINCIPAL,
+            "Fora do SLA": "#c96a55",
         },
     )
 
@@ -63,7 +68,9 @@ def grafico_percentual_sla_por_nivel(df):
     dados = df[df["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])].copy()
 
     if dados.empty:
-        return px.bar(title="Percentual de SLA por nível sem dados classificados")
+        return aplicar_cor_base(
+            px.bar(title="Percentual de SLA por nível sem dados classificados")
+        )
 
     resumo = (
         dados.groupby("nivelsla", dropna=False)
@@ -87,6 +94,7 @@ def grafico_percentual_sla_por_nivel(df):
         text="Percentual_Dentro",
         title="Percentual dentro do SLA por nível",
         custom_data=["Total"],
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_traces(
@@ -215,7 +223,7 @@ def grafico_evolutivo_lojas(df):
     resumo = _resumo_ultimos_meses(df)
 
     if resumo.empty:
-        return px.bar(title="Evolutivo de chamados sem dados")
+        return aplicar_cor_base(px.bar(title="Evolutivo de chamados sem dados"))
 
     barras = resumo.melt(
         id_vars=["Mes", "Mes_Label", "Total", "SLA (%)"],
@@ -232,7 +240,10 @@ def grafico_evolutivo_lojas(df):
         text="Quantidade",
         title="Evolutivo de chamados",
         barmode="stack",
-        color_discrete_map={"Incidente": "#7d7474", "Requisicao": "#ff9f87"},
+        color_discrete_map={
+            "Incidente": "#c96a55",
+            "Requisicao": COR_GRAFICO_PRINCIPAL,
+        },
     )
 
     figura.add_scatter(
@@ -242,7 +253,7 @@ def grafico_evolutivo_lojas(df):
         name="Total",
         text=resumo["Total"],
         textposition="top center",
-        line={"color": "#222222"},
+        line={"color": COR_GRAFICO_TEXTO},
         yaxis="y",
     )
     figura.add_scatter(
@@ -252,7 +263,7 @@ def grafico_evolutivo_lojas(df):
         name="SLA (%)",
         text=resumo["SLA (%)"].round(0).astype(int).astype(str) + "%",
         textposition="bottom center",
-        line={"color": "#111111", "dash": "dot"},
+        line={"color": "#e77f67", "dash": "dot"},
         yaxis="y2",
     )
     figura.update_layout(
@@ -1032,9 +1043,7 @@ with aba7:
         .index
     )
     df_top_10_categorias = df_lojas[df_lojas["Categoria"].isin(categorias_top_10)]
-    total_top_10_categorias = (
-        df_top_10_categorias["N° Chamado"].nunique()
-    )
+    total_top_10_categorias = df_top_10_categorias["N° Chamado"].nunique()
     percentual_top_10 = (
         total_top_10_categorias / total_chamados_lojas * 100
         if total_chamados_lojas
