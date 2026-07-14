@@ -6,7 +6,7 @@ from src.database import buscar_chamados, atualizar_chamados
 from src.leitura import carregar_excel
 from src.tratamento import SLA_NIVEIS_HORAS, preparar_base
 from src.filtros import aplicar_filtros, renderizar_filtros
-from src.metricas import calcular_kpis
+from src.metricas import calcular_kpis, calcular_resumo_sla_medido_por_nivel
 from src.graficos import (
     grafico_evolucao_semanal,
     grafico_top_problemas,
@@ -71,19 +71,18 @@ def grafico_percentual_sla_por_nivel(df):
             px.bar(title="Percentual de SLA por nível sem dados classificados")
         )
 
-    resumo = (
-        dados.groupby("nivelsla", dropna=False)
-        .agg(
-            Total=("N° Chamado", "nunique"),
-            Dentro=(
-                "SLA_Medido_Status",
-                lambda valores: (valores == "Dentro do SLA").sum(),
-            ),
-        )
-        .reset_index()
+    resumo = calcular_resumo_sla_medido_por_nivel(dados).rename(
+        columns={
+            "Quantidade": "Total",
+            "Dentro_SLA": "Dentro",
+        }
     )
-    resumo["Percentual_Dentro"] = resumo["Dentro"] / resumo["Total"] * 100
-    resumo = resumo.sort_values("Percentual_Dentro")
+    resumo["Percentual_Dentro"] = (
+        resumo["Dentro"]
+        / resumo["Chamados_Medidos"].replace(0, pd.NA)
+        * 100
+    ).fillna(0)
+    resumo = resumo[resumo["Chamados_Medidos"] > 0].sort_values("Percentual_Dentro")
 
     figura = px.bar(
         resumo,
@@ -837,11 +836,12 @@ with aba6:
     ].nunique()
     percentual_medido = dentro_medido / total_medido * 100 if total_medido else 0
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Chamados medidos", f"{total_medido:,}".replace(",", "."))
-    m2.metric("Dentro do SLA", f"{dentro_medido:,}".replace(",", "."))
-    m3.metric("Fora do SLA", f"{fora_medido:,}".replace(",", "."))
-    m4.metric("Aderência", f"{percentual_medido:.1f}%")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Total de chamados", f"{kpis['total']:,}".replace(",", "."))
+    m2.metric("Chamados medidos", f"{total_medido:,}".replace(",", "."))
+    m3.metric("Dentro do SLA", f"{dentro_medido:,}".replace(",", "."))
+    m4.metric("Fora do SLA", f"{fora_medido:,}".replace(",", "."))
+    m5.metric("Aderência", f"{percentual_medido:.1f}%")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -857,30 +857,7 @@ with aba6:
             key="grafico_percentual_sla_nivel",
         )
 
-    resumo_sla = (
-        df_filtrado.groupby("nivelsla", dropna=False)
-        .agg(
-            Meta_Horas=("SLA_Meta_Horas", "first"),
-            Quantidade=("N° Chamado", "nunique"),
-            Dentro_SLA=(
-                "SLA_Medido_Status",
-                lambda valores: (valores == "Dentro do SLA").sum(),
-            ),
-            Fora_SLA=(
-                "SLA_Medido_Status",
-                lambda valores: (valores == "Fora do SLA").sum(),
-            ),
-            Tempo_Medio_Medido_Horas=("SLA_Tempo_Medido_Horas", "mean"),
-            Excedido_Medio_Horas=("SLA_Excedido_Horas", "mean"),
-        )
-        .reset_index()
-        .sort_values("nivelsla", na_position="last")
-    )
-    resumo_sla["Aderencia_Percentual"] = (
-        resumo_sla["Dentro_SLA"]
-        / (resumo_sla["Dentro_SLA"] + resumo_sla["Fora_SLA"]).replace(0, pd.NA)
-        * 100
-    ).fillna(0)
+    resumo_sla = calcular_resumo_sla_medido_por_nivel(df_filtrado)
 
     st.dataframe(
         resumo_sla,
