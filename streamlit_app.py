@@ -374,7 +374,7 @@ def _renderizar_recorte_operacao(df_recorte, nome_recorte):
         unsafe_allow_html=True,
     )
     st.markdown(
-        f"<h2 class='recorte-title'>Saúde da Operação – Recorte {nome_recorte}</h2>",
+        f"<h2 class='recorte-title'>Saúde da Operação – {nome_recorte}</h2>",
         unsafe_allow_html=True,
     )
     st.markdown(
