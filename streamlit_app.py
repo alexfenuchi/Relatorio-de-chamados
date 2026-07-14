@@ -114,7 +114,7 @@ def grafico_percentual_sla_por_nivel(df):
 
 
 st.set_page_config(
-    page_title="Relatório de Chamados N2",
+    page_title="Relatorio de chamados - N2",
     page_icon="📊",
     layout="wide",
 )
@@ -288,7 +288,7 @@ if pagina == "Atualizar base":
     st.stop()
 
 
-st.title("📊 Central de Inteligência de Chamados")
+st.title("📊 Relatorio de chamados - N2")
 st.caption(
     "Painel executivo para acompanhamento de volume, SLA, backlog e ofensores. "
     "Tempos calculados em horas úteis: segunda a sexta-feira, com 1 dia = 8 horas."
