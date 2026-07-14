@@ -117,6 +117,31 @@ def _formatar_decimal(valor, casas=1):
     return f"{float(valor):.{casas}f}".replace(".", ",")
 
 
+def _contagem_tipos_chamado(df):
+    if df.empty or "Tipo do Chamado" not in df.columns:
+        return {"incidentes": 0, "requisicoes": 0}
+
+    tipo_chamado_normalizado = df["Tipo do Chamado"].fillna("").astype(str).str.lower()
+
+    return {
+        "incidentes": df.loc[
+            tipo_chamado_normalizado.str.contains("incidente", na=False),
+            "N° Chamado",
+        ].nunique(),
+        "requisicoes": df.loc[
+            tipo_chamado_normalizado.str.contains("requisi", na=False),
+            "N° Chamado",
+        ].nunique(),
+    }
+
+
+def _texto_tipos_chamado(contagem):
+    return (
+        f"Incidentes: {_formatar_inteiro(contagem['incidentes'])} | "
+        f"Requisições: {_formatar_inteiro(contagem['requisicoes'])}"
+    )
+
+
 def _base_recorte_lojas(df):
     dados = df.copy()
 
@@ -992,43 +1017,51 @@ with aba6:
 
 with aba7:
     st.caption("Indicadores Lojas")
-    st.header("Saúde da Operação – Recorte Lojas")
+    st.header("Operação Lojas")
 
     df_lojas = _base_recorte_lojas(df_filtrado)
     kpis_lojas = calcular_kpis(df_lojas)
     resumo_mensal_lojas = _resumo_ultimos_meses(df_lojas, meses=14)
 
     total_chamados_lojas = kpis_lojas["total"]
-    total_top_10_categorias = (
+    categorias_top_10 = (
         df_lojas.groupby("Categoria", dropna=False)["N° Chamado"]
         .nunique()
         .sort_values(ascending=False)
         .head(10)
-        .sum()
+        .index
+    )
+    df_top_10_categorias = df_lojas[df_lojas["Categoria"].isin(categorias_top_10)]
+    total_top_10_categorias = (
+        df_top_10_categorias["N° Chamado"].nunique()
     )
     percentual_top_10 = (
         total_top_10_categorias / total_chamados_lojas * 100
         if total_chamados_lojas
         else 0
     )
-    tipo_chamado_normalizado = (
-        df_lojas["Tipo do Chamado"].fillna("").astype(str).str.lower()
-    )
-    incidentes = df_lojas.loc[
-        tipo_chamado_normalizado.str.contains("incidente", na=False),
-        "N° Chamado",
-    ].nunique()
-    requisicoes = df_lojas.loc[
-        tipo_chamado_normalizado.str.contains("requisi", na=False),
-        "N° Chamado",
-    ].nunique()
+    tipos_total = _contagem_tipos_chamado(df_lojas)
+    tipos_top_10 = _contagem_tipos_chamado(df_top_10_categorias)
+    df_sla_medido = df_lojas[
+        df_lojas["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])
+    ]
+    tipos_sla_medido = _contagem_tipos_chamado(df_sla_medido)
+    incidentes = tipos_total["incidentes"]
+    requisicoes = tipos_total["requisicoes"]
     total_tipo = incidentes + requisicoes
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Chamados abertos no período", _formatar_inteiro(total_chamados_lojas))
+    col1.metric(
+        "Chamados abertos no período",
+        _formatar_inteiro(total_chamados_lojas),
+        _texto_tipos_chamado(tipos_total),
+        delta_color="off",
+    )
     col2.metric(
         "Chamados nas 10 principais categorias",
         f"{percentual_top_10:.0f}%",
+        _texto_tipos_chamado(tipos_top_10),
+        delta_color="off",
     )
     col3.metric(
         "Incidentes / Requisições",
@@ -1038,11 +1071,15 @@ with aba7:
             if total_tipo
             else "0% / 0%"
         ),
+        _texto_tipos_chamado(tipos_total),
+        delta_color="off",
     )
     col4.metric(
         "Cumprimento SLA / MTTR médio",
         f"{kpis_lojas['sla_medido_percentual']:.0f}% / "
         f"{_formatar_decimal(kpis_lojas['tempo_medio_horas'], 2)} h",
+        _texto_tipos_chamado(tipos_sla_medido),
+        delta_color="off",
     )
 
     evolucao_col, falhas_col = st.columns([1.05, 0.95])
