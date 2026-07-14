@@ -1,12 +1,34 @@
 import pandas as pd
 import plotly.express as px
 
+COR_GRAFICO_PRINCIPAL = "#ff9b80"
+PALETA_GRAFICOS = [
+    COR_GRAFICO_PRINCIPAL,
+    "#ffb39f",
+    "#e77f67",
+    "#ffc8bb",
+    "#c96a55",
+    "#ffe0d8",
+]
+COR_GRAFICO_TEXTO = "#2f2f2f"
+
+
+def aplicar_cor_base(figura):
+    """Aplica a cor base informada aos traços sem cor categórica explícita."""
+    for trace in figura.data:
+        if getattr(trace, "type", None) == "bar":
+            trace.update(marker_color=COR_GRAFICO_PRINCIPAL)
+        elif getattr(trace, "type", None) in {"scatter", "scattergl"}:
+            trace.update(
+                line={"color": COR_GRAFICO_PRINCIPAL},
+                marker={"color": COR_GRAFICO_PRINCIPAL},
+            )
+    return figura
+
 
 def grafico_evolucao_semanal(df):
     abertura = (
-        df.groupby("InicioSemana")["N° Chamado"]
-        .nunique()
-        .reset_index(name="Abertos")
+        df.groupby("InicioSemana")["N° Chamado"].nunique().reset_index(name="Abertos")
     )
 
     encerrados = (
@@ -23,11 +45,15 @@ def grafico_evolucao_semanal(df):
         .rename(columns={"SemanaEncerramento": "InicioSemana"})
     )
 
-    semanal = abertura.merge(
-        encerrados,
-        on="InicioSemana",
-        how="outer",
-    ).fillna(0).sort_values("InicioSemana")
+    semanal = (
+        abertura.merge(
+            encerrados,
+            on="InicioSemana",
+            how="outer",
+        )
+        .fillna(0)
+        .sort_values("InicioSemana")
+    )
 
     longo = semanal.melt(
         id_vars="InicioSemana",
@@ -43,6 +69,7 @@ def grafico_evolucao_semanal(df):
         color="Tipo",
         markers=True,
         title="Evolução semanal de chamados",
+        color_discrete_sequence=PALETA_GRAFICOS,
     )
 
     fig.update_layout(
@@ -71,6 +98,7 @@ def grafico_top_problemas(df, top_n=10):
         orientation="h",
         text="Quantidade",
         title=f"Top {top_n} problemas",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     fig.update_layout(
@@ -98,6 +126,7 @@ def grafico_top_lojas(df, top_n=15):
         orientation="h",
         text="Quantidade",
         title=f"Top {top_n} lojas com mais chamados",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     fig.update_layout(
@@ -121,6 +150,7 @@ def grafico_status(df):
         values="Quantidade",
         hole=0.55,
         title="Distribuição por situação",
+        color_discrete_sequence=PALETA_GRAFICOS,
     )
 
 
@@ -138,6 +168,7 @@ def grafico_sla(df):
         y="Quantidade",
         text="Quantidade",
         title="Chamados por status de SLA",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     fig.update_layout(
@@ -165,6 +196,7 @@ def grafico_responsaveis(df, top_n=15):
         orientation="h",
         text="Quantidade",
         title="Chamados por responsável",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     fig.update_layout(
@@ -183,7 +215,7 @@ def grafico_top_titulos(df, top_n=10):
     mas permanecem completos no tooltip.
     """
     if "Título" not in df.columns:
-        return px.bar(title="Títulos de chamados não disponíveis")
+        return aplicar_cor_base(px.bar(title="Títulos de chamados não disponíveis"))
 
     dados = df.copy()
 
@@ -211,15 +243,13 @@ def grafico_top_titulos(df, top_n=10):
     )
 
     if titulos.empty:
-        return px.bar(title="Nenhum título de chamado encontrado")
+        return aplicar_cor_base(px.bar(title="Nenhum título de chamado encontrado"))
 
     limite_texto = 90
 
     titulos["Titulo_Grafico"] = titulos["Titulo_Resumo"].apply(
         lambda texto: (
-            texto[:limite_texto] + "..."
-            if len(texto) > limite_texto
-            else texto
+            texto[:limite_texto] + "..." if len(texto) > limite_texto else texto
         )
     )
 
@@ -236,6 +266,7 @@ def grafico_top_titulos(df, top_n=10):
         text="Quantidade",
         title=f"Top {top_n} títulos dos chamados",
         custom_data=["Titulo_Resumo"],
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_traces(
@@ -256,6 +287,7 @@ def grafico_top_titulos(df, top_n=10):
 
     return figura
 
+
 def grafico_descricoes_problemas(df, top_n=10):
     """
     Cria um gráfico horizontal com as descrições de problemas mais recorrentes.
@@ -264,7 +296,7 @@ def grafico_descricoes_problemas(df, top_n=10):
     mas permanecem completos no tooltip.
     """
     if "descricao" not in df.columns:
-        return px.bar(title="Descrições de problemas não disponíveis")
+        return aplicar_cor_base(px.bar(title="Descrições de problemas não disponíveis"))
 
     dados = df.copy()
 
@@ -292,15 +324,15 @@ def grafico_descricoes_problemas(df, top_n=10):
     )
 
     if descricoes.empty:
-        return px.bar(title="Nenhuma descrição de problema encontrada")
+        return aplicar_cor_base(
+            px.bar(title="Nenhuma descrição de problema encontrada")
+        )
 
     limite_texto = 90
 
     descricoes["Descricao_Grafico"] = descricoes["Descricao_Resumo"].apply(
         lambda texto: (
-            texto[:limite_texto] + "..."
-            if len(texto) > limite_texto
-            else texto
+            texto[:limite_texto] + "..." if len(texto) > limite_texto else texto
         )
     )
 
@@ -317,6 +349,7 @@ def grafico_descricoes_problemas(df, top_n=10):
         text="Quantidade",
         title=f"Top {top_n} descrições de problemas",
         custom_data=["Descricao_Resumo"],
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_traces(
@@ -336,6 +369,7 @@ def grafico_descricoes_problemas(df, top_n=10):
     )
 
     return figura
+
 
 def grafico_aging_backlog(df):
     ordem = [
@@ -369,6 +403,7 @@ def grafico_aging_backlog(df):
         y="Quantidade",
         text="Quantidade",
         title="Backlog por faixa de idade",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_layout(
@@ -405,11 +440,7 @@ def grafico_sla_semanal(df):
         .reset_index()
     )
 
-    semanal["SLA_Percentual"] = (
-        semanal["DentroSLA"]
-        / semanal["Total"]
-        * 100
-    )
+    semanal["SLA_Percentual"] = semanal["DentroSLA"] / semanal["Total"] * 100
 
     figura = px.line(
         semanal,
@@ -417,6 +448,7 @@ def grafico_sla_semanal(df):
         y="SLA_Percentual",
         markers=True,
         title="Evolução semanal do SLA",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_layout(
@@ -453,6 +485,7 @@ def grafico_aberturas_dia_semana(df):
         y="Quantidade",
         text="Quantidade",
         title="Chamados abertos por dia da semana",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_layout(
@@ -465,10 +498,7 @@ def grafico_aberturas_dia_semana(df):
 
 def grafico_tempo_medio_problema(df, top_n=10):
     dados = (
-        df.loc[
-            df["Encerrado_Flag"]
-            & df["Tempo_Resolucao_Horas"].notna()
-        ]
+        df.loc[df["Encerrado_Flag"] & df["Tempo_Resolucao_Horas"].notna()]
         .groupby("Problema")
         .agg(
             Quantidade=("N° Chamado", "nunique"),
@@ -497,6 +527,7 @@ def grafico_tempo_medio_problema(df, top_n=10):
         text="Tempo_Medio_Horas",
         title=f"Top {top_n} problemas com maior tempo médio",
         custom_data=["Quantidade"],
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_traces(
@@ -531,6 +562,7 @@ def grafico_prioridades(df):
         y="Quantidade",
         text="Quantidade",
         title="Chamados por prioridade",
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_layout(
@@ -539,7 +571,6 @@ def grafico_prioridades(df):
     )
 
     return figura
-
 
 
 def grafico_sla_por_nivel(df):
@@ -551,7 +582,9 @@ def grafico_sla_por_nivel(df):
     )
 
     if dados.empty:
-        return px.bar(title="Medição de SLA por nível sem dados classificados")
+        return aplicar_cor_base(
+            px.bar(title="Medição de SLA por nível sem dados classificados")
+        )
 
     figura = px.bar(
         dados,
@@ -562,8 +595,8 @@ def grafico_sla_por_nivel(df):
         barmode="group",
         title="Medição de SLA por nível",
         color_discrete_map={
-            "Dentro do SLA": "#2ca02c",
-            "Fora do SLA": "#d62728",
+            "Dentro do SLA": COR_GRAFICO_PRINCIPAL,
+            "Fora do SLA": "#c96a55",
         },
     )
 
@@ -580,7 +613,9 @@ def grafico_percentual_sla_por_nivel(df):
     dados = df[df["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])].copy()
 
     if dados.empty:
-        return px.bar(title="Percentual de SLA por nível sem dados classificados")
+        return aplicar_cor_base(
+            px.bar(title="Percentual de SLA por nível sem dados classificados")
+        )
 
     resumo = (
         dados.groupby("nivelsla", dropna=False)
@@ -604,6 +639,7 @@ def grafico_percentual_sla_por_nivel(df):
         text="Percentual_Dentro",
         title="Percentual dentro do SLA por nível",
         custom_data=["Total"],
+        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
     )
 
     figura.update_traces(
