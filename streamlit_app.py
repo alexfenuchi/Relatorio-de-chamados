@@ -159,6 +159,27 @@ def _base_recorte_lojas(df):
     return dados
 
 
+def _base_recorte_cds(df):
+    dados = df.copy()
+
+    if "TipoLocalizacao" in dados.columns:
+        cds = dados[
+            dados["TipoLocalizacao"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.contains("cd", na=False)
+        ]
+        if not cds.empty:
+            dados = cds
+    elif "Grupo_Localizacao" in dados.columns:
+        cds = dados[dados["Grupo_Localizacao"].fillna("").astype(str).eq("CD")]
+        if not cds.empty:
+            dados = cds
+
+    return dados
+
+
 def _resumo_ultimos_meses(df, meses=14):
     dados = df.dropna(subset=["Abertura"]).copy()
 
@@ -551,7 +572,7 @@ d4.metric(
 )
 
 
-aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8 = st.tabs(
+aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8, aba9 = st.tabs(
     [
         "Visão geral",
         "Análise semanal",
@@ -560,6 +581,7 @@ aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8 = st.tabs(
         "SLA e backlog",
         "Medição SLA",
         "Saúde Operação - Lojas",
+        "Operação CDs",
         "Detalhamento",
     ]
 )
@@ -1140,6 +1162,128 @@ with aba7:
 
 
 with aba8:
+    st.caption("Indicadores CDs")
+    st.header("Operação CDs")
+
+    df_cds = _base_recorte_cds(df_filtrado)
+    kpis_cds = calcular_kpis(df_cds)
+    resumo_mensal_cds = _resumo_ultimos_meses(df_cds, meses=14)
+
+    total_chamados_cds = kpis_cds["total"]
+    categorias_top_10_cds = (
+        df_cds.groupby("Categoria", dropna=False)["N° Chamado"]
+        .nunique()
+        .sort_values(ascending=False)
+        .head(10)
+        .index
+    )
+    df_top_10_categorias_cds = df_cds[df_cds["Categoria"].isin(categorias_top_10_cds)]
+    total_top_10_categorias_cds = df_top_10_categorias_cds["N° Chamado"].nunique()
+    percentual_top_10_cds = (
+        total_top_10_categorias_cds / total_chamados_cds * 100
+        if total_chamados_cds
+        else 0
+    )
+    tipos_total_cds = _contagem_tipos_chamado(df_cds)
+    tipos_top_10_cds = _contagem_tipos_chamado(df_top_10_categorias_cds)
+    df_sla_medido_cds = df_cds[
+        df_cds["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])
+    ]
+    tipos_sla_medido_cds = _contagem_tipos_chamado(df_sla_medido_cds)
+    incidentes_cds = tipos_total_cds["incidentes"]
+    requisicoes_cds = tipos_total_cds["requisicoes"]
+    total_tipo_cds = incidentes_cds + requisicoes_cds
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric(
+        "Chamados abertos no período",
+        _formatar_inteiro(total_chamados_cds),
+        _texto_tipos_chamado(tipos_total_cds),
+        delta_color="off",
+    )
+    col2.metric(
+        "Chamados nas 10 principais categorias",
+        f"{percentual_top_10_cds:.0f}%",
+        _texto_tipos_chamado(tipos_top_10_cds),
+        delta_color="off",
+    )
+    col3.metric(
+        "Incidentes / Requisições",
+        (
+            f"{incidentes_cds / total_tipo_cds * 100:.0f}% / "
+            f"{requisicoes_cds / total_tipo_cds * 100:.0f}%"
+            if total_tipo_cds
+            else "0% / 0%"
+        ),
+        _texto_tipos_chamado(tipos_total_cds),
+        delta_color="off",
+    )
+    col4.metric(
+        "Cumprimento SLA / MTTR médio",
+        f"{kpis_cds['sla_medido_percentual']:.0f}% / "
+        f"{_formatar_decimal(kpis_cds['tempo_medio_horas'], 2)} h",
+        _texto_tipos_chamado(tipos_sla_medido_cds),
+        delta_color="off",
+    )
+
+    evolucao_col, falhas_col = st.columns([1.05, 0.95])
+
+    with evolucao_col:
+        st.plotly_chart(
+            grafico_evolutivo_lojas(df_cds),
+            width="stretch",
+            key="grafico_operacao_cds_evolutivo",
+        )
+
+        st.subheader("Observações")
+        if resumo_mensal_cds.empty:
+            st.info("Não há dados mensais para gerar observações automáticas.")
+        else:
+            ultimos = resumo_mensal_cds.tail(2)
+            observacoes = []
+            for _, linha in ultimos.iterrows():
+                cds_mes = df_cds.loc[
+                    df_cds["Abertura"].dt.to_period("M").dt.to_timestamp()
+                    == linha["Mes"],
+                    "Localizacao",
+                ].nunique()
+                media_por_cd = linha["Total"] / cds_mes if cds_mes else 0
+                observacoes.append(
+                    f"{linha['Mes'].strftime('%B/%Y')}: "
+                    f"{_formatar_inteiro(linha['Total'])} chamados em "
+                    f"{_formatar_inteiro(cds_mes)} CDs "
+                    f"({_formatar_decimal(media_por_cd, 2)} chamados/CD)."
+                )
+
+            st.markdown(
+                "\n".join(
+                    [
+                        "- **Chamados por CD**",
+                        *[f"  - {item}" for item in observacoes],
+                        f"- Sustentação de {_formatar_inteiro(total_chamados_cds)} chamados no período filtrado.",
+                        "- Necessidade de evolução contínua em SLA, MTTR e backlog.",
+                        "- Prioridade nos ofensores recorrentes e maturidade ITSM.",
+                    ]
+                )
+            )
+
+    with falhas_col:
+        st.subheader("Principais falhas último trimestre")
+        falhas = _principais_falhas_trimestre(df_cds, top_n=20)
+        if falhas.empty:
+            st.info("Não há dados suficientes para o último trimestre.")
+        else:
+            st.dataframe(
+                falhas,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "%": st.column_config.NumberColumn("%", format="%.1f%%"),
+                },
+            )
+
+
+with aba9:
     st.subheader("Análise dos títulos e descrições dos chamados")
 
     col_titulos, col_descricoes = st.columns(2)
