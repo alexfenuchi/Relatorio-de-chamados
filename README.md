@@ -94,3 +94,35 @@ A aba **Detalhamento** possui um gráfico horizontal com as descrições de prob
 - Chamados abertos por dia da semana.
 - Problemas com maior tempo médio de resolução.
 - Lista dos chamados pendentes mais antigos.
+
+## Leitura executiva e evolução dos relatórios
+
+O dashboard agora começa pela decisão, e não pelo gráfico: os filtros alimentam
+alertas automáticos de risco de SLA, pressão de backlog, principal ofensor e
+qualidade cadastral. O Excel também inclui uma primeira aba de resumo executivo,
+com indicadores de volume, fluxo, SLA, eficiência, aging e cobertura dos campos
+críticos.
+
+Para ampliar a maturidade do relatório, as próximas integrações de dados mais
+relevantes são:
+
+- **Satisfação (CSAT) e reabertura:** mostram qualidade percebida e soluções que
+  não foram definitivas.
+- **Primeiro atendimento e primeira resposta:** separam lentidão de triagem da
+  lentidão de resolução.
+- **Origem/canal e autosserviço:** medem demanda evitável e oportunidades para a
+  base de conhecimento.
+- **Transferências, escalonamentos e fila anterior:** identificam roteamento
+  incorreto e retrabalho entre equipes.
+- **Impacto, urgência e serviço afetado:** permitem priorizar por risco ao negócio,
+  em vez de apenas pela idade do chamado.
+- **Causa raiz, vínculo com problema e mudança:** conectam recorrência a ações
+  preventivas e permitem acompanhar redução sustentável do volume.
+- **Calendário operacional e feriados:** tornam a medição de horas úteis aderente
+  à jornada real de cada operação.
+- **Metas e capacidade por equipe:** permitem comparar demanda, throughput e
+  estoque, além de projetar risco futuro de backlog.
+
+Antes de adicionar novos gráficos, recomenda-se tornar obrigatórios os campos de
+localização, problema, responsável e nível SLA, pois eles sustentam a segmentação
+e a priorização operacional atuais.

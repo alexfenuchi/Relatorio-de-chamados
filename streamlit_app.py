@@ -26,6 +26,58 @@ from src.graficos import (
     COR_GRAFICO_PRINCIPAL,
 )
 from src.exportacao import gerar_excel_relatorio
+from src.insights import calcular_saude_dados, gerar_insights_executivos
+
+
+def _renderizar_resumo_executivo(df, kpis):
+    """Apresenta os sinais que exigem decisão antes das análises detalhadas."""
+    st.markdown(
+        "<div class='section-kicker'>CENTRAL DE DECISÃO</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("## O que precisa de atenção agora")
+    st.caption(
+        "Leitura automática do recorte selecionado; use-a para orientar "
+        "a reunião operacional."
+    )
+
+    insights = gerar_insights_executivos(df, kpis)
+    colunas = st.columns(len(insights))
+    icones = {
+        "crítico": "↗",
+        "atenção": "!",
+        "positivo": "✓",
+        "informativo": "→",
+    }
+    for coluna, insight in zip(colunas, insights):
+        with coluna:
+            st.markdown(
+                f"""
+                <div class="insight-card insight-{insight['nivel']}">
+                    <span class="insight-icon">{icones[insight['nivel']]}</span>
+                    <strong>{insight['titulo']}</strong>
+                    <p>{insight['texto']}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    with st.expander("Qualidade e cobertura dos dados"):
+        st.caption(
+            "Campos críticos incompletos reduzem a confiabilidade dos "
+            "relatórios e da priorização."
+        )
+        qualidade = calcular_saude_dados(df)
+        st.dataframe(
+            qualidade,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Cobertura_Percentual": st.column_config.ProgressColumn(
+                    "Cobertura", min_value=0, max_value=100, format="%.1f%%"
+                )
+            },
+        )
 
 
 def grafico_sla_por_nivel(df):
@@ -447,8 +499,9 @@ st.markdown(
     """
     <style>
     :root {
-        --accent: #ff7f66;
-        --accent-soft: #fff1ed;
+        --accent: #ff6b4a;
+        --accent-soft: #fff0ec;
+        --navy: #16324f;
         --surface: rgba(255, 255, 255, 0.86);
         --border: rgba(255, 127, 102, 0.18);
         --text: #24232a;
@@ -461,6 +514,30 @@ st.markdown(
             linear-gradient(135deg, #fff9f7 0%, #f7f9fc 52%, #ffffff 100%);
         color: var(--text);
     }
+
+    h1, h2, h3 { color: var(--navy); letter-spacing: -.025em; }
+
+    .hero {
+        background: linear-gradient(120deg, #102a43 0%, #1f4e6d 72%, #ff6b4a 160%);
+        border-radius: 24px;
+        color: white;
+        padding: 1.55rem 1.8rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 18px 42px rgba(16, 42, 67, .18);
+    }
+    .hero h1 { color: white; font-size: 2rem; margin: 0 0 .35rem; }
+    .hero p { color: #d9e7f0; margin: 0; max-width: 760px; }
+    .hero-badge { color: #ffb49f; font-size: .76rem; font-weight: 800; letter-spacing: .12em; }
+
+    .section-kicker { color: var(--accent); font-size: .72rem; font-weight: 900; letter-spacing: .14em; margin-top: 1.4rem; }
+    .insight-card { background: white; border: 1px solid #e5ebf0; border-top: 4px solid #6c8193; border-radius: 14px; min-height: 150px; padding: 1rem; box-shadow: 0 8px 24px rgba(16,42,67,.06); }
+    .insight-card strong { color: var(--navy); display: block; margin: .45rem 0; }
+    .insight-card p { color: var(--muted); font-size: .86rem; line-height: 1.45; margin: 0; }
+    .insight-icon { align-items: center; background: #eef4f7; border-radius: 99px; display: flex; font-weight: 900; height: 28px; justify-content: center; width: 28px; }
+    .insight-crítico { border-top-color: #c73e1d; }
+    .insight-atenção { border-top-color: #ed9b27; }
+    .insight-positivo { border-top-color: #278a67; }
+    .insight-informativo { border-top-color: #3977a8; }
 
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #fff7f4 0%, #ffffff 100%);
@@ -688,10 +765,15 @@ if pagina == "Atualizar base":
     st.stop()
 
 
-st.title("📊 Relatorio de chamados - N2")
-st.caption(
-    "Painel executivo para acompanhamento de volume, SLA, backlog e ofensores. "
-    "Tempos calculados em horas úteis: segunda a sexta-feira, com 1 dia = 8 horas."
+st.markdown(
+    """
+    <div class="hero">
+        <div class="hero-badge">SERVICE OPERATIONS · N2</div>
+        <h1>Relatório de chamados</h1>
+        <p>Visão executiva de demanda, eficiência, SLA e riscos operacionais. Tempos em horas úteis, de segunda a sexta-feira.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -836,6 +918,8 @@ d4.metric(
     f"{kpis['proximos_vencer']:,}".replace(",", "."),
     help="Pendentes dentro da meta, mas com até 2 horas úteis restantes.",
 )
+
+_renderizar_resumo_executivo(df_filtrado, kpis)
 
 
 aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8, aba9 = st.tabs(
