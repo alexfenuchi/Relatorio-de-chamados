@@ -1,4 +1,4 @@
-# Central de Inteligência de Chamados — Suporte N2
+# Relatorio de chamados - N2
 
 Aplicação em Streamlit para análise executiva da base anual de chamados do Suporte N2, com foco em volume, SLA, backlog e ofensores recorrentes.
 
