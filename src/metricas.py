@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 def _valor_seguro(valor):
     return 0 if pd.isna(valor) else float(valor)
 
@@ -19,16 +18,12 @@ def calcular_kpis(df):
     ].nunique()
 
     dentro_sla = df.loc[
-        df["SLA_Normalizado"].isin(
-            ["em dia", "dentro", "dentro do prazo"]
-        ),
+        df["SLA_Normalizado"].isin(["em dia", "dentro", "dentro do prazo"]),
         "N° Chamado",
     ].nunique()
 
     fora_sla = df.loc[
-        df["SLA_Normalizado"].isin(
-            ["em atraso", "fora", "fora do prazo"]
-        ),
+        df["SLA_Normalizado"].isin(["em atraso", "fora", "fora do prazo"]),
         "N° Chamado",
     ].nunique()
 
@@ -57,8 +52,7 @@ def calcular_kpis(df):
 
     if "Encerramento" in df.columns:
         encerrados_hoje = df.loc[
-            df["Encerramento"].notna()
-            & df["Encerramento"].dt.date.eq(hoje),
+            df["Encerramento"].notna() & df["Encerramento"].dt.date.eq(hoje),
             "N° Chamado",
         ].nunique()
     else:
@@ -69,10 +63,7 @@ def calcular_kpis(df):
         & df["SLA_Excedido_Horas"].eq(0)
         & df["SLA_Meta_Horas"].notna()
         & df["SLA_Tempo_Medido_Horas"].notna()
-        & (
-            (df["SLA_Meta_Horas"] - df["SLA_Tempo_Medido_Horas"])
-            <= 2
-        ),
+        & ((df["SLA_Meta_Horas"] - df["SLA_Tempo_Medido_Horas"]) <= 2),
         "N° Chamado",
     ].nunique()
 
@@ -92,25 +83,17 @@ def calcular_kpis(df):
         "total": total,
         "encerrados": encerrados,
         "pendentes": pendentes,
-        "percentual_encerrado": (
-            encerrados / total * 100
-            if total
-            else 0
-        ),
+        "percentual_encerrado": (encerrados / total * 100 if total else 0),
         "percentual_backlog": (pendentes / total * 100 if total else 0),
         "dentro_sla": dentro_sla,
         "fora_sla": fora_sla,
         "sla_percentual": (
-            dentro_sla / total_sla_classificado * 100
-            if total_sla_classificado
-            else 0
+            dentro_sla / total_sla_classificado * 100 if total_sla_classificado else 0
         ),
         "dentro_sla_medido": dentro_sla_medido,
         "fora_sla_medido": fora_sla_medido,
         "sla_medido_percentual": (
-            dentro_sla_medido / total_sla_medido * 100
-            if total_sla_medido
-            else 0
+            dentro_sla_medido / total_sla_medido * 100 if total_sla_medido else 0
         ),
         "abertos_hoje": abertos_hoje,
         "encerrados_hoje": encerrados_hoje,
@@ -152,9 +135,7 @@ def calcular_resumo_sla_medido_por_nivel(df):
         resumo = resumo.merge(contagem, on="nivelsla", how="left")
 
     resumo[["Dentro_SLA", "Fora_SLA"]] = (
-        resumo[["Dentro_SLA", "Fora_SLA"]]
-        .fillna(0)
-        .astype(int)
+        resumo[["Dentro_SLA", "Fora_SLA"]].fillna(0).astype(int)
     )
     resumo["Chamados_Medidos"] = resumo["Dentro_SLA"] + resumo["Fora_SLA"]
 
@@ -169,9 +150,7 @@ def calcular_resumo_sla_medido_por_nivel(df):
     )
     resumo = resumo.merge(medias, on="nivelsla", how="left")
     resumo["Aderencia_Percentual"] = (
-        resumo["Dentro_SLA"]
-        / resumo["Chamados_Medidos"].replace(0, pd.NA)
-        * 100
+        resumo["Dentro_SLA"] / resumo["Chamados_Medidos"].replace(0, pd.NA) * 100
     ).fillna(0)
 
     return resumo.sort_values("nivelsla", na_position="last")

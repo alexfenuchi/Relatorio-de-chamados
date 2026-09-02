@@ -14,6 +14,8 @@ Aplicação em Streamlit para análise executiva da base anual de chamados do Su
 - Análise por responsável
 - Filtros por período, grupo, localização, problema, status, responsável e SLA
 - Exportação do relatório filtrado em Excel
+- Placar executivo de realizado versus meta para SLA, backlog, MTTR e absorção
+- Comparação de demanda e capacidade com o período imediatamente anterior
 
 ## Estrutura esperada da base
 
@@ -67,7 +69,7 @@ git push -u origin main
 
 ## Melhorias operacionais recentes
 
-- O KPI principal de SLA agora usa a medição recalculada pelo dashboard, comparando o nível SLA com o tempo útil de resolução ou aging dos chamados pendentes.
+- O KPI principal de SLA usa a medição recalculada pelo dashboard, comparando o nível SLA com o tempo útil de resolução ou aging dos chamados pendentes; o status informado permanece disponível para auditoria.
 - A visão inicial inclui indicadores diários: chamados abertos hoje, encerrados hoje, chamados fora do SLA medido e chamados próximos de vencer.
 - A aba **SLA e backlog** exibe uma fila de prioridade operacional para orientar a ordem de atendimento do dia.
 - O comando de execução local aponta para `streamlit_app.py`, arquivo principal do projeto.
@@ -126,3 +128,12 @@ relevantes são:
 Antes de adicionar novos gráficos, recomenda-se tornar obrigatórios os campos de
 localização, problema, responsável e nível SLA, pois eles sustentam a segmentação
 e a priorização operacional atuais.
+
+## Placar executivo
+
+A central de decisão compara o resultado do período com metas iniciais de 95% de
+SLA medido, até 15% de backlog, até 8 horas úteis de MTTR e ao menos 100% de taxa
+de absorção. A taxa de absorção relaciona chamados encerrados e abertos no período;
+o saldo operacional positivo indica que a capacidade entregue superou a demanda.
+Essas referências estão centralizadas em `src/executivo.py` e podem ser ajustadas
+quando as metas corporativas forem formalizadas.
