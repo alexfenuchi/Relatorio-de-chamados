@@ -742,52 +742,6 @@ c4.metric(
     ),
 )
 
-st.caption(
-    "SLA no prazo considera os status recebidos da origem: "
-    "Em dia / (Em dia + Em atraso)."
-)
-
-c5, c6, c7, c8 = st.columns(4)
-c5.metric(
-    "Tempo médio",
-    f"{kpis['tempo_medio_horas']:.1f} h",
-    help="1 dia útil equivale a 8 horas.",
-)
-c6.metric(
-    "Tempo mediano",
-    f"{kpis['tempo_mediano_horas']:.1f} h",
-)
-c7.metric(
-    "Aging médio",
-    f"{kpis['aging_medio_dias']:.1f} dias",
-    help="Idade média dos chamados ainda pendentes.",
-)
-c8.metric(
-    "Maior aging",
-    f"{kpis['aging_maximo_dias']:.1f} dias",
-    help="Chamado pendente mais antigo, em dias de 8 horas.",
-)
-
-d1, d2, d3, d4 = st.columns(4)
-d1.metric(
-    "Abertos hoje",
-    f"{kpis['abertos_hoje']:,}".replace(",", "."),
-)
-d2.metric(
-    "Encerrados hoje",
-    f"{kpis['encerrados_hoje']:,}".replace(",", "."),
-)
-d3.metric(
-    "Chamados em atraso",
-    f"{kpis['fora_sla']:,}".replace(",", "."),
-    help="Chamados classificados como Em atraso no status SLA da origem.",
-)
-d4.metric(
-    "Próximos de vencer",
-    f"{kpis['proximos_vencer']:,}".replace(",", "."),
-    help="Pendentes dentro da meta, mas com até 2 horas úteis restantes.",
-)
-
 aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
     [
         "Visão geral",
