@@ -6,13 +6,7 @@ def _opcoes(df, coluna):
     if coluna not in df.columns:
         return []
 
-    return sorted(
-        df[coluna]
-        .dropna()
-        .astype(str)
-        .unique()
-        .tolist()
-    )
+    return sorted(df[coluna].dropna().astype(str).unique().tolist())
 
 
 def renderizar_filtros(df):
@@ -75,15 +69,13 @@ def renderizar_filtros(df):
     }
 
 
-def aplicar_filtros(df, filtros):
+def aplicar_filtros(df, filtros, aplicar_periodo=True):
     resultado = df.copy()
 
     periodo = filtros["periodo"]
-    if isinstance(periodo, tuple) and len(periodo) == 2:
+    if aplicar_periodo and isinstance(periodo, tuple) and len(periodo) == 2:
         inicio, fim = periodo
-        resultado = resultado[
-            resultado["Abertura"].dt.date.between(inicio, fim)
-        ]
+        resultado = resultado[resultado["Abertura"].dt.date.between(inicio, fim)]
 
     mapas = {
         "grupos": "Grupo_Localizacao",
@@ -98,8 +90,6 @@ def aplicar_filtros(df, filtros):
     for chave, coluna in mapas.items():
         selecionados = filtros[chave]
         if selecionados:
-            resultado = resultado[
-                resultado[coluna].astype(str).isin(selecionados)
-            ]
+            resultado = resultado[resultado[coluna].astype(str).isin(selecionados)]
 
     return resultado

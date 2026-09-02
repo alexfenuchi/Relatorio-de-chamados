@@ -3,8 +3,12 @@ import pandas as pd
 
 from src.tratamento import SLA_NIVEIS_HORAS
 from src.metricas import calcular_resumo_sla_medido_por_nivel
-from src.metricas import calcular_kpis
-from src.insights import calcular_saude_dados, criar_resumo_executivo
+from src.metricas import METAS_EXECUTIVAS, calcular_fluxo_periodo, calcular_kpis
+from src.insights import (
+    calcular_saude_dados,
+    criar_painel_metas,
+    criar_resumo_executivo,
+)
 
 
 def _preparar_para_excel(df: pd.DataFrame) -> pd.DataFrame:
@@ -66,6 +70,12 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
     dados = _preparar_para_excel(df)
     kpis = calcular_kpis(dados)
     resumo_executivo = criar_resumo_executivo(dados, kpis)
+    fluxo = calcular_fluxo_periodo(
+        dados,
+        dados["Abertura"].min(),
+        dados["Abertura"].max(),
+    )
+    painel_metas = criar_painel_metas(kpis, fluxo, METAS_EXECUTIVAS)
     saude_dados = calcular_saude_dados(dados)
     resumo_problemas = (
         dados.groupby("Problema", dropna=False)["N° Chamado"]
@@ -110,6 +120,12 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
     ) as writer:
         resumo_executivo.to_excel(writer, index=False, sheet_name="Resumo Executivo")
         saude_dados.to_excel(
+            writer,
+            index=False,
+            sheet_name="Resumo Executivo",
+            startrow=len(resumo_executivo) + len(painel_metas) + 6,
+        )
+        painel_metas.to_excel(
             writer,
             index=False,
             sheet_name="Resumo Executivo",
@@ -169,7 +185,10 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
                 worksheet.set_column(indice, indice, largura)
 
         resumo_ws = writer.sheets["Resumo Executivo"]
-        linha_qualidade = len(resumo_executivo) + 3
+        linha_metas = len(resumo_executivo) + 3
+        for indice, coluna in enumerate(painel_metas.columns):
+            resumo_ws.write(linha_metas, indice, coluna, cabecalho)
+        linha_qualidade = len(resumo_executivo) + len(painel_metas) + 6
         resumo_ws.write(linha_qualidade, 0, "Campo", cabecalho)
         resumo_ws.write(linha_qualidade, 1, "Preenchidos", cabecalho)
         resumo_ws.write(linha_qualidade, 2, "Cobertura_Percentual", cabecalho)

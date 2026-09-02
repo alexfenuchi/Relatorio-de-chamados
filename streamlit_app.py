@@ -7,7 +7,14 @@ from src.database import buscar_chamados, atualizar_chamados
 from src.leitura import carregar_excel
 from src.tratamento import SLA_NIVEIS_HORAS, preparar_base
 from src.filtros import aplicar_filtros, renderizar_filtros
-from src.metricas import calcular_kpis, calcular_resumo_sla_medido_por_nivel
+from src.metricas import (
+    METAS_EXECUTIVAS,
+    calcular_fluxo_periodo,
+    calcular_kpis,
+    calcular_periodo_anterior,
+    calcular_resumo_sla_medido_por_nivel,
+    calcular_variacao,
+)
 from src.graficos import (
     grafico_evolucao_semanal,
     grafico_top_problemas,
@@ -26,10 +33,20 @@ from src.graficos import (
     COR_GRAFICO_PRINCIPAL,
 )
 from src.exportacao import gerar_excel_relatorio
-from src.insights import calcular_saude_dados, gerar_insights_executivos
+from src.insights import (
+    calcular_saude_dados,
+    criar_painel_metas,
+    gerar_insights_executivos,
+)
 
 
-def _renderizar_resumo_executivo(df, kpis):
+def _formatar_delta(valor, sufixo="%"):
+    if valor is None:
+        return None
+    return f"{valor:+.1f}{sufixo} vs. período anterior"
+
+
+def _renderizar_resumo_executivo(df, kpis, fluxo, comparativo):
     """Apresenta os sinais que exigem decisão antes das análises detalhadas."""
     st.markdown(
         "<div class='section-kicker'>CENTRAL DE DECISÃO</div>",
@@ -39,6 +56,50 @@ def _renderizar_resumo_executivo(df, kpis):
     st.caption(
         "Leitura automática do recorte selecionado; use-a para orientar "
         "a reunião operacional."
+    )
+
+    st.markdown("### Resultado × meta")
+    placar = criar_painel_metas(kpis, fluxo, METAS_EXECUTIVAS)
+    st.dataframe(
+        placar,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Realizado": st.column_config.NumberColumn(format="%.1f"),
+            "Meta": st.column_config.NumberColumn(format="%.1f"),
+            "Desvio": st.column_config.NumberColumn(format="%+.1f"),
+        },
+    )
+
+    f1, f2, f3, f4 = st.columns(4)
+    f1.metric(
+        "Demanda recebida",
+        f"{fluxo['abertos']:,}".replace(",", "."),
+        delta=_formatar_delta(comparativo["abertos"]),
+        help="Chamados abertos dentro do período selecionado.",
+    )
+    f2.metric(
+        "Capacidade entregue",
+        f"{fluxo['encerrados']:,}".replace(",", "."),
+        delta=_formatar_delta(comparativo["encerrados"]),
+        help=(
+            "Chamados encerrados dentro do período, inclusive os "
+            "abertos anteriormente."
+        ),
+    )
+    f3.metric(
+        "Taxa de absorção",
+        f"{fluxo['taxa_absorcao']:.1f}%",
+        delta=_formatar_delta(comparativo["taxa_absorcao"]),
+        help=(
+            "Encerrados no período divididos pelos abertos no período. "
+            "Meta: 100%."
+        ),
+    )
+    f4.metric(
+        "Saldo operacional",
+        f"{fluxo['saldo']:+,}".replace(",", "."),
+        help="Encerrados menos abertos. Resultado negativo indica pressão de backlog.",
     )
 
     insights = gerar_insights_executivos(df, kpis)
@@ -842,6 +903,7 @@ if st.sidebar.button(
 
 filtros = renderizar_filtros(df)
 df_filtrado = aplicar_filtros(df, filtros)
+df_segmentado = aplicar_filtros(df, filtros, aplicar_periodo=False)
 
 if df_filtrado.empty:
     st.warning("Nenhum chamado encontrado para os filtros selecionados.")
@@ -849,6 +911,25 @@ if df_filtrado.empty:
 
 
 kpis = calcular_kpis(df_filtrado)
+
+periodo_selecionado = filtros["periodo"]
+if isinstance(periodo_selecionado, tuple) and len(periodo_selecionado) == 2:
+    inicio_periodo, fim_periodo = periodo_selecionado
+else:
+    inicio_periodo = df_filtrado["Abertura"].min().date()
+    fim_periodo = df_filtrado["Abertura"].max().date()
+
+fluxo = calcular_fluxo_periodo(df_segmentado, inicio_periodo, fim_periodo)
+inicio_anterior, fim_anterior = calcular_periodo_anterior(
+    inicio_periodo, fim_periodo
+)
+fluxo_anterior = calcular_fluxo_periodo(
+    df_segmentado, inicio_anterior, fim_anterior
+)
+comparativo_fluxo = {
+    indicador: calcular_variacao(fluxo[indicador], fluxo_anterior[indicador])
+    for indicador in ["abertos", "encerrados", "taxa_absorcao"]
+}
 
 
 c1, c2, c3, c4 = st.columns(4)
@@ -866,16 +947,16 @@ c3.metric(
 )
 c4.metric(
     "SLA no prazo",
-    f"{kpis['sla_percentual']:.1f}%",
+    f"{kpis['sla_medido_percentual']:.1f}%",
     help=(
-        "Percentual baseado no StatusSLA da base de origem: "
-        "chamados em dia sobre chamados em dia + em atraso."
+        "Percentual auditado pelo dashboard: tempo útil medido "
+        "comparado à meta do nível SLA."
     ),
 )
 
 st.caption(
-    "SLA principal baseado no StatusSLA recebido da base de origem. "
-    "A aba 'Medição SLA' mantém a visão recalculada pelo dashboard por nível SLA."
+    "SLA principal recalculado pelo dashboard. O status recebido da origem "
+    "permanece disponível para conferência e auditoria."
 )
 
 c5, c6, c7, c8 = st.columns(4)
@@ -910,8 +991,8 @@ d2.metric(
 )
 d3.metric(
     "Chamados em atraso",
-    f"{kpis['fora_sla']:,}".replace(",", "."),
-    help="Contagem baseada no StatusSLA da base de origem.",
+    f"{kpis['fora_sla_medido']:,}".replace(",", "."),
+    help="Contagem recalculada pelo dashboard com base na meta do nível SLA.",
 )
 d4.metric(
     "Próximos de vencer",
@@ -919,7 +1000,7 @@ d4.metric(
     help="Pendentes dentro da meta, mas com até 2 horas úteis restantes.",
 )
 
-_renderizar_resumo_executivo(df_filtrado, kpis)
+_renderizar_resumo_executivo(df_filtrado, kpis, fluxo, comparativo_fluxo)
 
 
 aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8, aba9 = st.tabs(
@@ -1318,18 +1399,18 @@ with aba6:
     m2.metric("Chamados medidos", f"{total_medido:,}".replace(",", "."))
     m3.metric(
         "Chamados no prazo",
-        f"{kpis['dentro_sla']:,}".replace(",", "."),
-        help="Contagem baseada no StatusSLA da base de origem.",
+        f"{kpis['dentro_sla_medido']:,}".replace(",", "."),
+        help="Contagem recalculada pelo dashboard.",
     )
     m4.metric(
         "Chamados em atraso",
-        f"{kpis['fora_sla']:,}".replace(",", "."),
-        help="Contagem baseada no StatusSLA da base de origem.",
+        f"{kpis['fora_sla_medido']:,}".replace(",", "."),
+        help="Contagem recalculada pelo dashboard.",
     )
     m5.metric(
         "SLA no prazo",
-        f"{kpis['sla_percentual']:.1f}%",
-        help="Percentual baseado no StatusSLA da base de origem.",
+        f"{kpis['sla_medido_percentual']:.1f}%",
+        help="Percentual recalculado pelo dashboard.",
     )
 
     col1, col2 = st.columns(2)

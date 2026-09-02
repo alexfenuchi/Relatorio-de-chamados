@@ -36,14 +36,17 @@ def gerar_insights_executivos(df: pd.DataFrame, kpis: dict) -> list[dict[str, st
     total = max(kpis["total"], 1)
     backlog_pct = kpis["pendentes"] / total * 100
 
-    if kpis["fora_sla"]:
+    if kpis["fora_sla_medido"]:
         insights.append(
             {
-                "nivel": "crítico" if kpis["sla_percentual"] < 90 else "atenção",
+                "nivel": (
+                    "crítico" if kpis["sla_medido_percentual"] < 90 else "atenção"
+                ),
                 "titulo": "Risco de SLA",
                 "texto": (
-                    f"{kpis['fora_sla']:,} chamados estão em atraso e a aderência "
-                    f"é de {kpis['sla_percentual']:.1f}%. Priorize a fila por "
+                    f"{kpis['fora_sla_medido']:,} chamados estão em atraso medido "
+                    f"e a aderência é de {kpis['sla_medido_percentual']:.1f}%. "
+                    "Priorize a fila por "
                     "excedente e criticidade."
                 ),
             }
@@ -108,8 +111,8 @@ def criar_resumo_executivo(df: pd.DataFrame, kpis: dict) -> pd.DataFrame:
             ("Fluxo", "Encerrados", kpis["encerrados"]),
             ("Fluxo", "Backlog", kpis["pendentes"]),
             ("Fluxo", "Backlog (%)", kpis["pendentes"] / total * 100),
-            ("SLA", "Aderência informada (%)", kpis["sla_percentual"]),
-            ("SLA", "Chamados em atraso", kpis["fora_sla"]),
+            ("SLA", "Aderência medida (%)", kpis["sla_medido_percentual"]),
+            ("SLA", "Chamados em atraso medido", kpis["fora_sla_medido"]),
             ("Eficiência", "MTTR médio (h úteis)", kpis["tempo_medio_horas"]),
             ("Eficiência", "MTTR mediano (h úteis)", kpis["tempo_mediano_horas"]),
             ("Backlog", "Aging médio (dias úteis)", kpis["aging_medio_dias"]),
@@ -117,3 +120,46 @@ def criar_resumo_executivo(df: pd.DataFrame, kpis: dict) -> pd.DataFrame:
         ],
         columns=["Dimensão", "Indicador", "Valor"],
     )
+
+
+def criar_painel_metas(kpis: dict, fluxo: dict, metas: dict) -> pd.DataFrame:
+    """Monta o placar executivo com realizado, meta, desvio e semáforo."""
+    indicadores = [
+        (
+            "SLA medido",
+            kpis["sla_medido_percentual"],
+            metas["sla_medido_percentual"],
+            True,
+            "%",
+        ),
+        (
+            "Backlog",
+            kpis["percentual_backlog"],
+            metas["percentual_backlog"],
+            False,
+            "%",
+        ),
+        (
+            "MTTR médio",
+            kpis["tempo_medio_horas"],
+            metas["tempo_medio_horas"],
+            False,
+            "h",
+        ),
+        ("Taxa de absorção", fluxo["taxa_absorcao"], metas["taxa_absorcao"], True, "%"),
+    ]
+    linhas = []
+    for indicador, realizado, meta, maior_melhor, unidade in indicadores:
+        desvio = realizado - meta
+        atingiu = realizado >= meta if maior_melhor else realizado <= meta
+        linhas.append(
+            {
+                "Indicador": indicador,
+                "Realizado": realizado,
+                "Meta": meta,
+                "Desvio": desvio,
+                "Unidade": unidade,
+                "Status": "Na meta" if atingiu else "Fora da meta",
+            }
+        )
+    return pd.DataFrame(linhas)
