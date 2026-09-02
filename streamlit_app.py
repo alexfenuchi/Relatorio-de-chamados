@@ -7,14 +7,13 @@ from src.database import buscar_chamados, atualizar_chamados
 from src.leitura import carregar_excel
 from src.tratamento import SLA_NIVEIS_HORAS, preparar_base
 from src.filtros import aplicar_filtros, renderizar_filtros
-from src.metricas import (
+from src.executivo import (
     METAS_EXECUTIVAS,
     calcular_fluxo_periodo,
-    calcular_kpis,
     calcular_periodo_anterior,
-    calcular_resumo_sla_medido_por_nivel,
     calcular_variacao,
 )
+from src.metricas import calcular_kpis, calcular_resumo_sla_medido_por_nivel
 from src.graficos import (
     grafico_evolucao_semanal,
     grafico_top_problemas,

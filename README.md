@@ -135,5 +135,5 @@ A central de decisão compara o resultado do período com metas iniciais de 95% 
 SLA medido, até 15% de backlog, até 8 horas úteis de MTTR e ao menos 100% de taxa
 de absorção. A taxa de absorção relaciona chamados encerrados e abertos no período;
 o saldo operacional positivo indica que a capacidade entregue superou a demanda.
-Essas referências estão centralizadas em `src/metricas.py` e podem ser ajustadas
+Essas referências estão centralizadas em `src/executivo.py` e podem ser ajustadas
 quando as metas corporativas forem formalizadas.
