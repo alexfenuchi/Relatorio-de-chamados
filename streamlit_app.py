@@ -7,6 +7,7 @@ from src.database import buscar_chamados, atualizar_chamados
 from src.leitura import carregar_excel
 from src.tratamento import SLA_NIVEIS_HORAS, preparar_base
 from src.filtros import aplicar_filtros, renderizar_filtros
+from src.metricas import calcular_kpis
 from src.metricas import (
     METAS_EXECUTIVAS,
     calcular_fluxo_periodo,
@@ -23,7 +24,6 @@ from src.graficos import (
     grafico_responsaveis,
     grafico_top_titulos,
     grafico_descricoes_problemas,
-    grafico_aging_backlog,
     grafico_sla_semanal,
     grafico_aberturas_dia_semana,
     grafico_tempo_medio_problema,
@@ -32,112 +32,6 @@ from src.graficos import (
     COR_GRAFICO_PRINCIPAL,
 )
 from src.exportacao import gerar_excel_relatorio
-from src.insights import (
-    calcular_saude_dados,
-    criar_painel_metas,
-    gerar_insights_executivos,
-)
-
-
-def _formatar_delta(valor, sufixo="%"):
-    if valor is None:
-        return None
-    return f"{valor:+.1f}{sufixo} vs. período anterior"
-
-
-def _renderizar_resumo_executivo(df, kpis, fluxo, comparativo):
-    """Apresenta os sinais que exigem decisão antes das análises detalhadas."""
-    st.markdown(
-        "<div class='section-kicker'>CENTRAL DE DECISÃO</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("## O que precisa de atenção agora")
-    st.caption(
-        "Leitura automática do recorte selecionado; use-a para orientar "
-        "a reunião operacional."
-    )
-
-    st.markdown("### Resultado × meta")
-    placar = criar_painel_metas(kpis, fluxo, METAS_EXECUTIVAS)
-    st.dataframe(
-        placar,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "Realizado": st.column_config.NumberColumn(format="%.1f"),
-            "Meta": st.column_config.NumberColumn(format="%.1f"),
-            "Desvio": st.column_config.NumberColumn(format="%+.1f"),
-        },
-    )
-
-    f1, f2, f3, f4 = st.columns(4)
-    f1.metric(
-        "Demanda recebida",
-        f"{fluxo['abertos']:,}".replace(",", "."),
-        delta=_formatar_delta(comparativo["abertos"]),
-        help="Chamados abertos dentro do período selecionado.",
-    )
-    f2.metric(
-        "Capacidade entregue",
-        f"{fluxo['encerrados']:,}".replace(",", "."),
-        delta=_formatar_delta(comparativo["encerrados"]),
-        help=(
-            "Chamados encerrados dentro do período, inclusive os "
-            "abertos anteriormente."
-        ),
-    )
-    f3.metric(
-        "Taxa de absorção",
-        f"{fluxo['taxa_absorcao']:.1f}%",
-        delta=_formatar_delta(comparativo["taxa_absorcao"]),
-        help=(
-            "Encerrados no período divididos pelos abertos no período. "
-            "Meta: 100%."
-        ),
-    )
-    f4.metric(
-        "Saldo operacional",
-        f"{fluxo['saldo']:+,}".replace(",", "."),
-        help="Encerrados menos abertos. Resultado negativo indica pressão de backlog.",
-    )
-
-    insights = gerar_insights_executivos(df, kpis)
-    colunas = st.columns(len(insights))
-    icones = {
-        "crítico": "↗",
-        "atenção": "!",
-        "positivo": "✓",
-        "informativo": "→",
-    }
-    for coluna, insight in zip(colunas, insights):
-        with coluna:
-            st.markdown(
-                f"""
-                <div class="insight-card insight-{insight['nivel']}">
-                    <span class="insight-icon">{icones[insight['nivel']]}</span>
-                    <strong>{insight['titulo']}</strong>
-                    <p>{insight['texto']}</p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    with st.expander("Qualidade e cobertura dos dados"):
-        st.caption(
-            "Campos críticos incompletos reduzem a confiabilidade dos "
-            "relatórios e da priorização."
-        )
-        qualidade = calcular_saude_dados(df)
-        st.dataframe(
-            qualidade,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Cobertura_Percentual": st.column_config.ProgressColumn(
-                    "Cobertura", min_value=0, max_value=100, format="%.1f%%"
-                )
-            },
-        )
 
 
 def _formatar_periodo_filtrado(df):
@@ -818,7 +712,6 @@ if st.sidebar.button(
 
 filtros = renderizar_filtros(df)
 df_filtrado = aplicar_filtros(df, filtros)
-df_segmentado = aplicar_filtros(df, filtros, aplicar_periodo=False)
 
 if df_filtrado.empty:
     st.warning("Nenhum chamado encontrado para os filtros selecionados.")
@@ -826,26 +719,6 @@ if df_filtrado.empty:
 
 
 kpis = calcular_kpis(df_filtrado)
-
-periodo_selecionado = filtros["periodo"]
-if isinstance(periodo_selecionado, tuple) and len(periodo_selecionado) == 2:
-    inicio_periodo, fim_periodo = periodo_selecionado
-else:
-    inicio_periodo = df_filtrado["Abertura"].min().date()
-    fim_periodo = df_filtrado["Abertura"].max().date()
-
-fluxo = calcular_fluxo_periodo(df_segmentado, inicio_periodo, fim_periodo)
-inicio_anterior, fim_anterior = calcular_periodo_anterior(
-    inicio_periodo, fim_periodo
-)
-fluxo_anterior = calcular_fluxo_periodo(
-    df_segmentado, inicio_anterior, fim_anterior
-)
-comparativo_fluxo = {
-    indicador: calcular_variacao(fluxo[indicador], fluxo_anterior[indicador])
-    for indicador in ["abertos", "encerrados", "taxa_absorcao"]
-}
-
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(
@@ -915,16 +788,12 @@ d4.metric(
     help="Pendentes dentro da meta, mas com até 2 horas úteis restantes.",
 )
 
-_renderizar_resumo_executivo(df_filtrado, kpis, fluxo, comparativo_fluxo)
-
-
-aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8 = st.tabs(
+aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
     [
         "Visão geral",
         "Tendência semanal",
         "Problemas",
         "Localizações e responsáveis",
-        "SLA e backlog",
         "Recorte Loja",
         "Recorte CD",
         "Detalhamento",
@@ -1176,133 +1045,16 @@ with aba4:
 
 
 with aba5:
-    b1, b2, b3, b4 = st.columns(4)
-
-    b1.metric(
-        "Dentro do SLA",
-        f"{kpis['dentro_sla']:,}".replace(",", "."),
-    )
-    b2.metric(
-        "Fora do SLA",
-        f"{kpis['fora_sla']:,}".replace(",", "."),
-    )
-    b3.metric(
-        "Backlog",
-        f"{kpis['pendentes']:,}".replace(",", "."),
-    )
-    b4.metric(
-        "Aging máximo",
-        f"{kpis['aging_maximo_horas']:.1f} h",
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.plotly_chart(
-            grafico_aging_backlog(df_filtrado),
-            width="stretch",
-            key="grafico_backlog_aging",
-        )
-
-    with col2:
-        st.plotly_chart(
-            grafico_sla_semanal(df_filtrado),
-            width="stretch",
-            key="grafico_backlog_sla_semanal",
-        )
-
-    backlog = df_filtrado.loc[~df_filtrado["Encerrado_Flag"]].sort_values(
-        "Idade_Pendente_Horas",
-        ascending=False,
-    )
-
-    st.subheader("Fila de prioridade operacional")
-    st.caption(
-        "Ordenação sugerida para o dia a dia: primeiro chamados fora do SLA "
-        "medido, depois maior aging, prioridade e nível SLA."
-    )
-
-    prioridade_ordem = {
-        "P1": 1,
-        "1": 1,
-        "P2": 2,
-        "2": 2,
-        "P3": 3,
-        "3": 3,
-        "P4": 4,
-        "4": 4,
-        "P5": 5,
-        "5": 5,
-    }
-    backlog_priorizado = backlog.copy()
-    backlog_priorizado["Prioridade_Ordenacao"] = (
-        backlog_priorizado["prioridade"]
-        .fillna("")
-        .astype(str)
-        .str.upper()
-        .str.extract(r"(P?[1-5])", expand=False)
-        .map(prioridade_ordem)
-        .fillna(99)
-    )
-    backlog_priorizado["Fora_SLA_Ordenacao"] = (
-        backlog_priorizado["SLA_Medido_Status"].eq("Fora do SLA").astype(int)
-    )
-    backlog_priorizado = backlog_priorizado.sort_values(
-        [
-            "Fora_SLA_Ordenacao",
-            "Idade_Pendente_Horas",
-            "Prioridade_Ordenacao",
-            "nivelsla",
-        ],
-        ascending=[False, False, True, True],
-    )
-
-    colunas_backlog = [
-        "N° Chamado",
-        "Localizacao",
-        "Abertura",
-        "Problema",
-        "Responsavel",
-        "StatusSLA",
-        "Idade_Pendente_Horas",
-        "Idade_Pendente_Dias",
-        "Faixa_Aging",
-    ]
-
-    st.dataframe(
-        backlog_priorizado[
-            [
-                coluna
-                for coluna in colunas_backlog
-                if coluna in backlog_priorizado.columns
-            ]
-        ].head(100),
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "Idade_Pendente_Horas": st.column_config.NumberColumn(
-                "Aging (h)",
-                format="%.1f",
-            ),
-            "Idade_Pendente_Dias": st.column_config.NumberColumn(
-                "Aging (dias de 8h)",
-                format="%.1f",
-            ),
-        },
-    )
-
-
-with aba6:
     df_loja = df_filtrado[df_filtrado["Grupo_Localizacao"].eq("Loja")]
     _renderizar_recorte_operacao(df_loja, "Loja")
 
 
-with aba7:
+with aba6:
     df_cd = df_filtrado[df_filtrado["Grupo_Localizacao"].eq("CD")]
     _renderizar_recorte_operacao(df_cd, "CD")
 
 
-with aba8:
+with aba7:
     st.subheader("Análise dos títulos e descrições dos chamados")
 
     col_titulos, col_descricoes = st.columns(2)
