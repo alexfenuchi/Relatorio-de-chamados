@@ -1,6 +1,8 @@
 import pandas as pd
 import plotly.express as px
 
+from src.metricas import calcular_resumo_sla_medido_por_nivel
+
 COR_GRAFICO_PRINCIPAL = "#ff9b80"
 PALETA_GRAFICOS = [
     COR_GRAFICO_PRINCIPAL,
@@ -617,19 +619,18 @@ def grafico_percentual_sla_por_nivel(df):
             px.bar(title="Percentual de SLA por nível sem dados classificados")
         )
 
-    resumo = (
-        dados.groupby("nivelsla", dropna=False)
-        .agg(
-            Total=("N° Chamado", "nunique"),
-            Dentro=(
-                "SLA_Medido_Status",
-                lambda valores: (valores == "Dentro do SLA").sum(),
-            ),
-        )
-        .reset_index()
+    resumo = calcular_resumo_sla_medido_por_nivel(dados).rename(
+        columns={
+            "Quantidade": "Total",
+            "Dentro_SLA": "Dentro",
+        }
     )
-    resumo["Percentual_Dentro"] = resumo["Dentro"] / resumo["Total"] * 100
-    resumo = resumo.sort_values("Percentual_Dentro")
+    resumo["Percentual_Dentro"] = (
+        resumo["Dentro"]
+        / resumo["Chamados_Medidos"].replace(0, pd.NA)
+        * 100
+    ).fillna(0)
+    resumo = resumo[resumo["Chamados_Medidos"] > 0].sort_values("Percentual_Dentro")
 
     figura = px.bar(
         resumo,

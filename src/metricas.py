@@ -123,3 +123,54 @@ def calcular_kpis(df):
         "aging_maximo_dias": _valor_seguro(aging.max() / 8),
         "lojas": lojas,
     }
+
+
+def calcular_resumo_sla_medido_por_nivel(df):
+    """Resume a medição de SLA por nível usando chamados únicos.
+
+    Mantém a quantidade total de chamados do nível separada dos contadores
+    medidos, para evitar que totais sejam inflados por linhas/flags auxiliares
+    e para deixar os indicadores de SLA consistentes em todas as visões.
+    """
+    resumo = (
+        df.groupby("nivelsla", dropna=False)["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+    )
+
+    for coluna, status in {
+        "Dentro_SLA": "Dentro do SLA",
+        "Fora_SLA": "Fora do SLA",
+    }.items():
+        contagem = (
+            df.loc[df["SLA_Medido_Status"].eq(status)]
+            .groupby("nivelsla", dropna=False)["N° Chamado"]
+            .nunique()
+            .reset_index(name=coluna)
+        )
+        resumo = resumo.merge(contagem, on="nivelsla", how="left")
+
+    resumo[["Dentro_SLA", "Fora_SLA"]] = (
+        resumo[["Dentro_SLA", "Fora_SLA"]]
+        .fillna(0)
+        .astype(int)
+    )
+    resumo["Chamados_Medidos"] = resumo["Dentro_SLA"] + resumo["Fora_SLA"]
+
+    medias = (
+        df.groupby("nivelsla", dropna=False)
+        .agg(
+            Meta_Horas=("SLA_Meta_Horas", "first"),
+            Tempo_Medio_Medido_Horas=("SLA_Tempo_Medido_Horas", "mean"),
+            Excedido_Medio_Horas=("SLA_Excedido_Horas", "mean"),
+        )
+        .reset_index()
+    )
+    resumo = resumo.merge(medias, on="nivelsla", how="left")
+    resumo["Aderencia_Percentual"] = (
+        resumo["Dentro_SLA"]
+        / resumo["Chamados_Medidos"].replace(0, pd.NA)
+        * 100
+    ).fillna(0)
+
+    return resumo.sort_values("nivelsla", na_position="last")

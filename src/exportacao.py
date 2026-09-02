@@ -2,6 +2,7 @@ from io import BytesIO
 import pandas as pd
 
 from src.tratamento import SLA_NIVEIS_HORAS
+from src.metricas import calcular_resumo_sla_medido_por_nivel
 
 def _preparar_para_excel(df: pd.DataFrame) -> pd.DataFrame:
     dados = df.copy()
@@ -37,30 +38,7 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         .nunique().reset_index(name='Quantidade')
         .sort_values('InicioSemana')
     )
-    resumo_sla = (
-        dados.groupby('nivelsla', dropna=False)
-        .agg(
-            Meta_Horas=('SLA_Meta_Horas', 'first'),
-            Quantidade=('N° Chamado', 'nunique'),
-            Dentro_SLA=(
-                'SLA_Medido_Status',
-                lambda valores: (valores == 'Dentro do SLA').sum(),
-            ),
-            Fora_SLA=(
-                'SLA_Medido_Status',
-                lambda valores: (valores == 'Fora do SLA').sum(),
-            ),
-            Tempo_Medio_Medido_Horas=('SLA_Tempo_Medido_Horas', 'mean'),
-            Excedido_Medio_Horas=('SLA_Excedido_Horas', 'mean'),
-        )
-        .reset_index()
-        .sort_values('nivelsla', na_position='last')
-    )
-    resumo_sla['Aderencia_Percentual'] = (
-        resumo_sla['Dentro_SLA']
-        / (resumo_sla['Dentro_SLA'] + resumo_sla['Fora_SLA']).replace(0, pd.NA)
-        * 100
-    ).fillna(0)
+    resumo_sla = calcular_resumo_sla_medido_por_nivel(dados)
     niveis_sla = pd.DataFrame(
         [
             {'nivelsla': nivel, 'Meta': f'{horas} horas'}
