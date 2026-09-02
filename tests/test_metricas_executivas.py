@@ -6,6 +6,7 @@ from src.insights import criar_painel_metas
 from src.metricas import (
     METAS_EXECUTIVAS,
     calcular_fluxo_periodo,
+    calcular_kpis,
     calcular_periodo_anterior,
     calcular_variacao,
 )
@@ -42,6 +43,29 @@ class MetricasExecutivasTest(unittest.TestCase):
     def test_variacao_sem_base_retorna_none(self):
         self.assertIsNone(calcular_variacao(10, 0))
         self.assertEqual(calcular_variacao(120, 100), 20)
+
+    def test_sla_no_prazo_considera_em_dia_e_em_atraso(self):
+        dados = pd.DataFrame(
+            {
+                "N° Chamado": ["1", "2", "3", "4"],
+                "SLA_Normalizado": ["em dia", "em dia", "em atraso", "não informado"],
+                "Encerrado_Flag": [True, True, True, False],
+                "Abertura": pd.to_datetime(["2026-08-01"] * 4),
+                "Encerramento": pd.to_datetime(["2026-08-02"] * 3 + [None]),
+                "SLA_Excedido_Horas": [0.0] * 4,
+                "SLA_Meta_Horas": [8.0] * 4,
+                "SLA_Tempo_Medido_Horas": [4.0] * 4,
+                "Tempo_Resolucao_Horas": [4.0, 5.0, 6.0, None],
+                "Idade_Pendente_Horas": [None, None, None, 4.0],
+                "Localizacao": ["Loja 1"] * 4,
+            }
+        )
+
+        kpis = calcular_kpis(dados)
+
+        self.assertEqual(kpis["dentro_sla"], 2)
+        self.assertEqual(kpis["fora_sla"], 1)
+        self.assertAlmostEqual(kpis["sla_percentual"], 200 / 3)
 
     def test_painel_metas_classifica_direcoes_corretamente(self):
         kpis = {
