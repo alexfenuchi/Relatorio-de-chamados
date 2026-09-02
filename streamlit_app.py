@@ -1,5 +1,6 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from src.database import buscar_chamados, atualizar_chamados
@@ -25,6 +26,58 @@ from src.graficos import (
     COR_GRAFICO_PRINCIPAL,
 )
 from src.exportacao import gerar_excel_relatorio
+from src.insights import calcular_saude_dados, gerar_insights_executivos
+
+
+def _renderizar_resumo_executivo(df, kpis):
+    """Apresenta os sinais que exigem decisão antes das análises detalhadas."""
+    st.markdown(
+        "<div class='section-kicker'>CENTRAL DE DECISÃO</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("## O que precisa de atenção agora")
+    st.caption(
+        "Leitura automática do recorte selecionado; use-a para orientar "
+        "a reunião operacional."
+    )
+
+    insights = gerar_insights_executivos(df, kpis)
+    colunas = st.columns(len(insights))
+    icones = {
+        "crítico": "↗",
+        "atenção": "!",
+        "positivo": "✓",
+        "informativo": "→",
+    }
+    for coluna, insight in zip(colunas, insights):
+        with coluna:
+            st.markdown(
+                f"""
+                <div class="insight-card insight-{insight['nivel']}">
+                    <span class="insight-icon">{icones[insight['nivel']]}</span>
+                    <strong>{insight['titulo']}</strong>
+                    <p>{insight['texto']}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    with st.expander("Qualidade e cobertura dos dados"):
+        st.caption(
+            "Campos críticos incompletos reduzem a confiabilidade dos "
+            "relatórios e da priorização."
+        )
+        qualidade = calcular_saude_dados(df)
+        st.dataframe(
+            qualidade,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Cobertura_Percentual": st.column_config.ProgressColumn(
+                    "Cobertura", min_value=0, max_value=100, format="%.1f%%"
+                )
+            },
+        )
 
 
 def grafico_sla_por_nivel(df):
@@ -78,9 +131,7 @@ def grafico_percentual_sla_por_nivel(df):
         }
     )
     resumo["Percentual_Dentro"] = (
-        resumo["Dentro"]
-        / resumo["Chamados_Medidos"].replace(0, pd.NA)
-        * 100
+        resumo["Dentro"] / resumo["Chamados_Medidos"].replace(0, pd.NA) * 100
     ).fillna(0)
     resumo = resumo[resumo["Chamados_Medidos"] > 0].sort_values("Percentual_Dentro")
 
@@ -113,6 +164,331 @@ def grafico_percentual_sla_por_nivel(df):
     return figura
 
 
+def _formatar_periodo_filtrado(df):
+    datas = df["Abertura"].dropna()
+    if datas.empty:
+        return "período filtrado"
+
+    inicio = datas.min().strftime("%d/%m/%Y")
+    fim = datas.max().strftime("%d/%m/%Y")
+    if inicio == fim:
+        return inicio
+    return f"{inicio} a {fim}"
+
+
+def _rotulo_mes_periodo(periodo):
+    meses = {
+        1: "jan",
+        2: "fev",
+        3: "mar",
+        4: "abr",
+        5: "mai",
+        6: "jun",
+        7: "jul",
+        8: "ago",
+        9: "set",
+        10: "out",
+        11: "nov",
+        12: "dez",
+    }
+    return f"{meses[periodo.month]}-{str(periodo.year)[-2:]}"
+
+
+def _tipo_operacional(df):
+    tipo = df.get("Tipo do Chamado", pd.Series(index=df.index, dtype="object"))
+    tipo_normalizado = tipo.fillna("").astype(str).str.lower()
+    return tipo_normalizado.str.contains("requi", regex=False).map(
+        {True: "Requisição", False: "Incidente"}
+    )
+
+
+def _calcular_resumo_mensal_recorte(df_recorte):
+    dados = df_recorte.dropna(subset=["Abertura"]).copy()
+    if dados.empty:
+        return pd.DataFrame()
+
+    dados["Mes_Periodo"] = dados["Abertura"].dt.to_period("M")
+    dados["Mes_Label"] = dados["Mes_Periodo"].apply(_rotulo_mes_periodo)
+    dados["Tipo_Operacional"] = _tipo_operacional(dados)
+
+    mensal = (
+        dados.groupby(["Mes_Periodo", "Mes_Label", "Tipo_Operacional"])["N° Chamado"]
+        .nunique()
+        .unstack(fill_value=0)
+        .reset_index()
+        .sort_values("Mes_Periodo")
+    )
+
+    for coluna in ["Incidente", "Requisição"]:
+        if coluna not in mensal.columns:
+            mensal[coluna] = 0
+
+    sla_mensal = (
+        dados[
+            dados["SLA_Normalizado"].isin(
+                [
+                    "em dia",
+                    "dentro",
+                    "dentro do prazo",
+                    "em atraso",
+                    "fora",
+                    "fora do prazo",
+                ]
+            )
+        ]
+        .assign(
+            Dentro_SLA=lambda frame: frame["SLA_Normalizado"].isin(
+                ["em dia", "dentro", "dentro do prazo"]
+            )
+        )
+        .groupby("Mes_Periodo")
+        .agg(
+            Chamados_SLA=("N° Chamado", "nunique"),
+            Dentro_SLA=("Dentro_SLA", "sum"),
+        )
+        .reset_index()
+    )
+
+    mensal = mensal.merge(sla_mensal, on="Mes_Periodo", how="left")
+    mensal["Total"] = mensal["Incidente"] + mensal["Requisição"]
+    mensal["SLA_Percentual"] = (
+        mensal["Dentro_SLA"] / mensal["Chamados_SLA"].replace(0, pd.NA) * 100
+    ).fillna(0)
+
+    return mensal
+
+
+def _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte):
+    mensal = _calcular_resumo_mensal_recorte(df_recorte)
+    if mensal.empty:
+        return aplicar_cor_base(px.bar(title="Evolutivo de chamados sem dados"))
+
+    figura = go.Figure()
+    figura.add_bar(
+        x=mensal["Mes_Label"],
+        y=mensal["Incidente"],
+        name="Incidente",
+        marker_color="#6f6764",
+        text=mensal["Incidente"],
+        texttemplate="%{text:.0f}",
+        textposition="inside",
+    )
+    figura.add_bar(
+        x=mensal["Mes_Label"],
+        y=mensal["Requisição"],
+        name="Requisição",
+        marker_color=COR_GRAFICO_PRINCIPAL,
+        text=mensal["Requisição"],
+        texttemplate="%{text:.0f}",
+        textposition="inside",
+    )
+    figura.add_scatter(
+        x=mensal["Mes_Label"],
+        y=mensal["Total"],
+        name="Total",
+        mode="lines+markers+text",
+        line={"color": "#3d3634", "width": 2},
+        marker={"color": "white", "line": {"color": "#3d3634", "width": 1.5}},
+        text=mensal["Total"],
+        textposition="top center",
+        yaxis="y",
+    )
+    figura.add_scatter(
+        x=mensal["Mes_Label"],
+        y=mensal["SLA_Percentual"],
+        name="SLA (%)",
+        mode="lines+markers+text",
+        line={"color": "#111111", "width": 2},
+        marker={"color": "#111111"},
+        text=mensal["SLA_Percentual"].round(0).astype(int).astype(str) + "%",
+        textposition="bottom center",
+        yaxis="y2",
+    )
+
+    figura.update_layout(
+        title=f"EVOLUTIVO DE CHAMADOS - {nome_recorte.upper()}",
+        barmode="stack",
+        height=360,
+        margin={"l": 25, "r": 30, "t": 55, "b": 25},
+        legend={"orientation": "h", "y": 1.15, "x": 0.2},
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        yaxis={"title": "", "rangemode": "tozero", "gridcolor": "#eeeeee"},
+        yaxis2={
+            "title": "",
+            "overlaying": "y",
+            "side": "right",
+            "range": [0, 100],
+            "ticksuffix": "%",
+            "showgrid": False,
+        },
+    )
+    figura.update_xaxes(tickangle=-45)
+    return figura
+
+
+def _calcular_tabela_falhas_periodo(df_recorte, top_n=20):
+    dados = df_recorte.dropna(subset=["Abertura"]).copy()
+    if dados.empty:
+        return pd.DataFrame()
+
+    dados["Mes_Label"] = dados["Abertura"].dt.to_period("M").apply(_rotulo_mes_periodo)
+    ordem_meses = (
+        dados[["Abertura", "Mes_Label"]]
+        .assign(Mes_Periodo=lambda frame: frame["Abertura"].dt.to_period("M"))
+        .sort_values("Mes_Periodo")["Mes_Label"]
+        .drop_duplicates()
+        .tolist()
+    )
+
+    tabela = pd.pivot_table(
+        dados,
+        index="Problema",
+        columns="Mes_Label",
+        values="N° Chamado",
+        aggfunc="nunique",
+        fill_value=0,
+    )
+    tabela = tabela.reindex(columns=ordem_meses, fill_value=0)
+    tabela["Total"] = tabela.sum(axis=1)
+    total_geral = tabela["Total"].sum()
+    tabela["%"] = (tabela["Total"] / total_geral * 100).fillna(0).round(1)
+    tabela = tabela.sort_values("Total", ascending=False).head(top_n).reset_index()
+    return tabela.rename(columns={"Problema": f"TOP {top_n} Categorias"})
+
+
+def _renderizar_cards_recorte(
+    kpis_recorte, percentual_top10, percentual_incidentes, percentual_requisicoes
+):
+    st.markdown(
+        f"""
+        <div class="recorte-kpi-grid">
+            <div class="recorte-kpi-card">
+                <div class="recorte-kpi-value">{kpis_recorte['total']:,}</div>
+                <div class="recorte-kpi-label">Chamados abertos no período</div>
+            </div>
+            <div class="recorte-kpi-card">
+                <div class="recorte-kpi-value">{percentual_top10:.0f}%</div>
+                <div class="recorte-kpi-label">Chamados concentrados nas 10 principais categorias</div>
+            </div>
+            <div class="recorte-kpi-card recorte-kpi-split">
+                <div>
+                    <div class="recorte-kpi-value">{percentual_incidentes:.0f}%</div>
+                    <div class="recorte-kpi-label">Incidentes no período</div>
+                </div>
+                <div>
+                    <div class="recorte-kpi-value">{percentual_requisicoes:.0f}%</div>
+                    <div class="recorte-kpi-label">Requisições no período</div>
+                </div>
+            </div>
+            <div class="recorte-kpi-card recorte-kpi-split">
+                <div>
+                    <div class="recorte-kpi-value">{kpis_recorte['sla_percentual']:.0f}%</div>
+                    <div class="recorte-kpi-label">Cumprimento do SLA</div>
+                </div>
+                <div>
+                    <div class="recorte-kpi-value">{kpis_recorte['tempo_medio_horas']:.1f}</div>
+                    <div class="recorte-kpi-label">MTTR Médio</div>
+                </div>
+            </div>
+        </div>
+        """.replace(",", "."),
+        unsafe_allow_html=True,
+    )
+
+
+def _renderizar_recorte_operacao(df_recorte, nome_recorte):
+    if df_recorte.empty:
+        st.info(f"Nenhum chamado de {nome_recorte} no período selecionado.")
+        return
+
+    periodo = _formatar_periodo_filtrado(df_recorte)
+    kpis_recorte = calcular_kpis(df_recorte)
+    tipos = _tipo_operacional(df_recorte)
+    total_chamados = max(kpis_recorte["total"], 1)
+    percentual_incidentes = (tipos.eq("Incidente").sum() / total_chamados) * 100
+    percentual_requisicoes = (tipos.eq("Requisição").sum() / total_chamados) * 100
+
+    resumo_problemas = (
+        df_recorte.groupby("Problema", dropna=False)["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+        .sort_values("Quantidade", ascending=False)
+    )
+    percentual_top10 = (
+        resumo_problemas.head(10)["Quantidade"].sum()
+        / resumo_problemas["Quantidade"].sum()
+        * 100
+    )
+
+    st.markdown(
+        f"<span class='recorte-eyebrow'>• Indicadores {nome_recorte}</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<h2 class='recorte-title'>Saúde da Operação – {nome_recorte}</h2>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<div class='recorte-periodo'>Período filtrado: {periodo}</div>",
+        unsafe_allow_html=True,
+    )
+
+    _renderizar_cards_recorte(
+        kpis_recorte,
+        percentual_top10,
+        percentual_incidentes,
+        percentual_requisicoes,
+    )
+
+    col_grafico, col_tabela = st.columns([1.05, 0.95])
+    with col_grafico:
+        st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
+        st.plotly_chart(
+            _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte),
+            width="stretch",
+            key=f"grafico_recorte_{nome_recorte.lower()}_evolutivo_formato",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_tabela:
+        st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
+        st.subheader("Principais falhas do período")
+        tabela_falhas = _calcular_tabela_falhas_periodo(df_recorte)
+        st.dataframe(
+            tabela_falhas,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "%": st.column_config.NumberColumn("%", format="%.1f%%"),
+            },
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    resumo_localizacoes = (
+        df_recorte.groupby("Localizacao", dropna=False)
+        .agg(
+            Chamados=("N° Chamado", "nunique"),
+            Problemas_Distintos=("Problema", "nunique"),
+            Pendentes=("Encerrado_Flag", lambda valores: (~valores).sum()),
+            MTTR_Horas=("Tempo_Resolucao_Horas", "mean"),
+        )
+        .reset_index()
+        .sort_values("Chamados", ascending=False)
+    )
+    st.markdown("<div class='recorte-panel'>", unsafe_allow_html=True)
+    st.subheader("Chamados por localização")
+    st.dataframe(
+        resumo_localizacoes.head(20),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "MTTR_Horas": st.column_config.NumberColumn("MTTR (h)", format="%.1f"),
+        },
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 st.set_page_config(
     page_title="Relatorio de chamados - N2",
     page_icon="📊",
@@ -123,8 +499,9 @@ st.markdown(
     """
     <style>
     :root {
-        --accent: #ff7f66;
-        --accent-soft: #fff1ed;
+        --accent: #ff6b4a;
+        --accent-soft: #fff0ec;
+        --navy: #16324f;
         --surface: rgba(255, 255, 255, 0.86);
         --border: rgba(255, 127, 102, 0.18);
         --text: #24232a;
@@ -137,6 +514,30 @@ st.markdown(
             linear-gradient(135deg, #fff9f7 0%, #f7f9fc 52%, #ffffff 100%);
         color: var(--text);
     }
+
+    h1, h2, h3 { color: var(--navy); letter-spacing: -.025em; }
+
+    .hero {
+        background: linear-gradient(120deg, #102a43 0%, #1f4e6d 72%, #ff6b4a 160%);
+        border-radius: 24px;
+        color: white;
+        padding: 1.55rem 1.8rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 18px 42px rgba(16, 42, 67, .18);
+    }
+    .hero h1 { color: white; font-size: 2rem; margin: 0 0 .35rem; }
+    .hero p { color: #d9e7f0; margin: 0; max-width: 760px; }
+    .hero-badge { color: #ffb49f; font-size: .76rem; font-weight: 800; letter-spacing: .12em; }
+
+    .section-kicker { color: var(--accent); font-size: .72rem; font-weight: 900; letter-spacing: .14em; margin-top: 1.4rem; }
+    .insight-card { background: white; border: 1px solid #e5ebf0; border-top: 4px solid #6c8193; border-radius: 14px; min-height: 150px; padding: 1rem; box-shadow: 0 8px 24px rgba(16,42,67,.06); }
+    .insight-card strong { color: var(--navy); display: block; margin: .45rem 0; }
+    .insight-card p { color: var(--muted); font-size: .86rem; line-height: 1.45; margin: 0; }
+    .insight-icon { align-items: center; background: #eef4f7; border-radius: 99px; display: flex; font-weight: 900; height: 28px; justify-content: center; width: 28px; }
+    .insight-crítico { border-top-color: #c73e1d; }
+    .insight-atenção { border-top-color: #ed9b27; }
+    .insight-positivo { border-top-color: #278a67; }
+    .insight-informativo { border-top-color: #3977a8; }
 
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #fff7f4 0%, #ffffff 100%);
@@ -187,6 +588,82 @@ st.markdown(
         border-radius: 18px;
         box-shadow: 0 16px 40px rgba(44, 38, 35, 0.06);
         padding: .35rem;
+    }
+
+    .recorte-eyebrow {
+        color: var(--muted);
+        font-size: .95rem;
+        font-weight: 700;
+    }
+
+    .recorte-title {
+        color: #221f20;
+        font-size: 2.2rem;
+        font-weight: 900;
+        margin: .1rem 0 .15rem 0;
+        border-bottom: 7px solid rgba(255, 127, 102, .72);
+        padding-bottom: .35rem;
+        box-shadow: 0 6px 4px -5px rgba(44, 38, 35, .6);
+    }
+
+    .recorte-periodo {
+        color: var(--muted);
+        font-size: .92rem;
+        margin-bottom: 1rem;
+    }
+
+    .recorte-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+        margin: 1.15rem 0 1.35rem;
+    }
+
+    .recorte-kpi-card {
+        background: rgba(255, 255, 255, .92);
+        border: 1px solid rgba(108, 86, 78, .16);
+        border-left: 7px solid var(--accent);
+        border-radius: 16px;
+        box-shadow: 0 8px 12px rgba(44, 38, 35, .18);
+        min-height: 86px;
+        padding: 1.05rem 1.1rem .85rem;
+    }
+
+    .recorte-kpi-split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .recorte-kpi-value {
+        color: #221f20;
+        font-size: 2rem;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .recorte-kpi-label {
+        color: var(--muted);
+        font-size: .82rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-top: .45rem;
+    }
+
+    .recorte-panel {
+        background: rgba(255, 255, 255, .94);
+        border: 1px solid rgba(108, 86, 78, .16);
+        border-radius: 32px;
+        box-shadow: 0 8px 12px rgba(44, 38, 35, .16);
+        padding: 1.1rem 1.2rem;
+        margin-bottom: 1.1rem;
+    }
+
+
+    @media (max-width: 1100px) {
+        .recorte-kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
     .block-container {
@@ -288,10 +765,15 @@ if pagina == "Atualizar base":
     st.stop()
 
 
-st.title("📊 Relatorio de chamados - N2")
-st.caption(
-    "Painel executivo para acompanhamento de volume, SLA, backlog e ofensores. "
-    "Tempos calculados em horas úteis: segunda a sexta-feira, com 1 dia = 8 horas."
+st.markdown(
+    """
+    <div class="hero">
+        <div class="hero-badge">SERVICE OPERATIONS · N2</div>
+        <h1>Relatório de chamados</h1>
+        <p>Visão executiva de demanda, eficiência, SLA e riscos operacionais. Tempos em horas úteis, de segunda a sexta-feira.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -437,8 +919,10 @@ d4.metric(
     help="Pendentes dentro da meta, mas com até 2 horas úteis restantes.",
 )
 
+_renderizar_resumo_executivo(df_filtrado, kpis)
 
-aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
+
+aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8, aba9 = st.tabs(
     [
         "Visão geral",
         "Tendência semanal",
@@ -446,6 +930,8 @@ aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
         "Localizações e responsáveis",
         "SLA e backlog",
         "Medição SLA",
+        "Recorte Loja",
+        "Recorte CD",
         "Detalhamento",
     ]
 )
@@ -882,6 +1368,16 @@ with aba6:
 
 
 with aba7:
+    df_loja = df_filtrado[df_filtrado["Grupo_Localizacao"].eq("Loja")]
+    _renderizar_recorte_operacao(df_loja, "Loja")
+
+
+with aba8:
+    df_cd = df_filtrado[df_filtrado["Grupo_Localizacao"].eq("CD")]
+    _renderizar_recorte_operacao(df_cd, "CD")
+
+
+with aba9:
     st.subheader("Análise dos títulos e descrições dos chamados")
 
     col_titulos, col_descricoes = st.columns(2)

@@ -97,6 +97,7 @@ def calcular_kpis(df):
             if total
             else 0
         ),
+        "percentual_backlog": (pendentes / total * 100 if total else 0),
         "dentro_sla": dentro_sla,
         "fora_sla": fora_sla,
         "sla_percentual": (
