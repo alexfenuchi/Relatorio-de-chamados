@@ -3,8 +3,7 @@ import pandas as pd
 
 from src.tratamento import SLA_NIVEIS_HORAS
 from src.metricas import calcular_resumo_sla_medido_por_nivel
-from src.executivo import METAS_EXECUTIVAS, calcular_fluxo_periodo
-from src.metricas import calcular_kpis
+from src.metricas import METAS_EXECUTIVAS, calcular_fluxo_periodo, calcular_kpis
 from src.insights import (
     calcular_saude_dados,
     criar_painel_metas,

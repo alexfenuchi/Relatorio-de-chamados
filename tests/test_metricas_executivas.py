@@ -3,7 +3,7 @@ import unittest
 import pandas as pd
 
 from src.insights import criar_painel_metas
-from src.executivo import (
+from src.metricas import (
     METAS_EXECUTIVAS,
     calcular_fluxo_periodo,
     calcular_periodo_anterior,
