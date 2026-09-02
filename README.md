@@ -70,7 +70,6 @@ git push -u origin main
 ## Melhorias operacionais recentes
 
 - O KPI principal de SLA usa a medição recalculada pelo dashboard, comparando o nível SLA com o tempo útil de resolução ou aging dos chamados pendentes; o status informado permanece disponível para auditoria.
-- A visão inicial inclui indicadores diários: chamados abertos hoje, encerrados hoje, chamados fora do SLA medido e chamados próximos de vencer.
 - A aba **SLA e backlog** exibe uma fila de prioridade operacional para orientar a ordem de atendimento do dia.
 - O comando de execução local aponta para `streamlit_app.py`, arquivo principal do projeto.
 
