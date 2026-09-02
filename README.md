@@ -1,6 +1,6 @@
-# Relatório de Chamados — Suporte N2
+# Central de Inteligência de Chamados — Suporte N2
 
-Aplicação em Streamlit para análise da base anual de chamados do Suporte N2.
+Aplicação em Streamlit para análise executiva da base anual de chamados do Suporte N2, com foco em volume, SLA, backlog e ofensores recorrentes.
 
 ## Funcionalidades
 
@@ -10,9 +10,9 @@ Aplicação em Streamlit para análise da base anual de chamados do Suporte N2.
 - Indicadores de chamados encerrados, pendentes e SLA
 - Evolução semanal
 - Top problemas
-- Top lojas
+- Top localizações
 - Análise por responsável
-- Filtros por período, grupo (Loja/CD), loja, problema, status, responsável e SLA
+- Filtros por período, grupo, localização, problema, status, responsável e SLA
 - Exportação do relatório filtrado em Excel
 
 ## Estrutura esperada da base
