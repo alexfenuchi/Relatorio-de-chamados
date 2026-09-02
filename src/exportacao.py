@@ -3,6 +3,8 @@ import pandas as pd
 
 from src.tratamento import SLA_NIVEIS_HORAS
 from src.metricas import calcular_resumo_sla_medido_por_nivel
+from src.metricas import calcular_kpis
+from src.insights import calcular_saude_dados, criar_resumo_executivo
 
 
 def _preparar_para_excel(df: pd.DataFrame) -> pd.DataFrame:
@@ -62,6 +64,9 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         raise ValueError("Não existem dados para gerar o relatório Excel.")
 
     dados = _preparar_para_excel(df)
+    kpis = calcular_kpis(dados)
+    resumo_executivo = criar_resumo_executivo(dados, kpis)
+    saude_dados = calcular_saude_dados(dados)
     resumo_problemas = (
         dados.groupby("Problema", dropna=False)["N° Chamado"]
         .nunique()
@@ -103,6 +108,13 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         datetime_format="dd/mm/yyyy hh:mm",
         date_format="dd/mm/yyyy",
     ) as writer:
+        resumo_executivo.to_excel(writer, index=False, sheet_name="Resumo Executivo")
+        saude_dados.to_excel(
+            writer,
+            index=False,
+            sheet_name="Resumo Executivo",
+            startrow=len(resumo_executivo) + 3,
+        )
         dados.to_excel(writer, index=False, sheet_name="Chamados")
         resumo_semanal.to_excel(writer, index=False, sheet_name="Semanal")
         resumo_problemas.to_excel(writer, index=False, sheet_name="Problemas")
@@ -119,6 +131,7 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
         niveis_sla.to_excel(writer, index=False, sheet_name="NivelSLA")
 
         for nome_aba, dataframe in {
+            "Resumo Executivo": resumo_executivo,
             "Chamados": dados,
             "Semanal": resumo_semanal,
             "Problemas": resumo_problemas,
@@ -135,9 +148,31 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
             "NivelSLA": niveis_sla,
         }.items():
             worksheet = writer.sheets[nome_aba]
+            workbook = writer.book
+            cabecalho = workbook.add_format(
+                {
+                    "bold": True,
+                    "font_color": "#FFFFFF",
+                    "bg_color": "#16324F",
+                    "border": 0,
+                    "align": "left",
+                }
+            )
+            worksheet.freeze_panes(1, 0)
+            worksheet.autofilter(
+                0, 0, len(dataframe), max(len(dataframe.columns) - 1, 0)
+            )
+            for indice, coluna in enumerate(dataframe.columns):
+                worksheet.write(0, indice, coluna, cabecalho)
             for indice, coluna in enumerate(dataframe.columns):
                 largura = min(max(len(str(coluna)) + 2, 12), 45)
                 worksheet.set_column(indice, indice, largura)
+
+        resumo_ws = writer.sheets["Resumo Executivo"]
+        linha_qualidade = len(resumo_executivo) + 3
+        resumo_ws.write(linha_qualidade, 0, "Campo", cabecalho)
+        resumo_ws.write(linha_qualidade, 1, "Preenchidos", cabecalho)
+        resumo_ws.write(linha_qualidade, 2, "Cobertura_Percentual", cabecalho)
 
     saida.seek(0)
     return saida.getvalue()
