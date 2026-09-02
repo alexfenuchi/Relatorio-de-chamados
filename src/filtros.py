@@ -34,7 +34,7 @@ def renderizar_filtros(df):
     )
 
     lojas = st.sidebar.multiselect(
-        "Loja",
+        "Localização",
         _opcoes(df, "Localizacao"),
     )
 

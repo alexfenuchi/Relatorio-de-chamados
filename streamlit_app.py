@@ -23,7 +23,6 @@ from src.graficos import (
     grafico_prioridades,
     aplicar_cor_base,
     COR_GRAFICO_PRINCIPAL,
-    COR_GRAFICO_TEXTO,
 )
 from src.exportacao import gerar_excel_relatorio
 
@@ -115,212 +114,89 @@ def grafico_percentual_sla_por_nivel(df):
     return figura
 
 
-def _formatar_inteiro(valor):
-    return f"{int(valor):,}".replace(",", ".")
-
-
-def _formatar_decimal(valor, casas=1):
-    if pd.isna(valor):
-        valor = 0
-    return f"{float(valor):.{casas}f}".replace(".", ",")
-
-
-def _contagem_tipos_chamado(df):
-    if df.empty or "Tipo do Chamado" not in df.columns:
-        return {"incidentes": 0, "requisicoes": 0}
-
-    tipo_chamado_normalizado = df["Tipo do Chamado"].fillna("").astype(str).str.lower()
-
-    return {
-        "incidentes": df.loc[
-            tipo_chamado_normalizado.str.contains("incidente", na=False),
-            "N° Chamado",
-        ].nunique(),
-        "requisicoes": df.loc[
-            tipo_chamado_normalizado.str.contains("requisi", na=False),
-            "N° Chamado",
-        ].nunique(),
-    }
-
-
-def _texto_tipos_chamado(contagem):
-    return (
-        f"Incidentes: {_formatar_inteiro(contagem['incidentes'])} | "
-        f"Requisições: {_formatar_inteiro(contagem['requisicoes'])}"
-    )
-
-
-def _base_recorte_lojas(df):
-    dados = df.copy()
-
-    if "TipoLocalizacao" in dados.columns:
-        lojas = dados[
-            dados["TipoLocalizacao"]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains("loja", na=False)
-        ]
-        if not lojas.empty:
-            dados = lojas
-
-    return dados
-
-
-def _resumo_ultimos_meses(df, meses=14):
-    dados = df.dropna(subset=["Abertura"]).copy()
-
-    if dados.empty:
-        return pd.DataFrame()
-
-    dados["Mes"] = dados["Abertura"].dt.to_period("M").dt.to_timestamp()
-    meses_validos = sorted(dados["Mes"].dropna().unique())[-meses:]
-    dados = dados[dados["Mes"].isin(meses_validos)]
-
-    resumo = (
-        dados.groupby("Mes")
-        .agg(
-            Incidente=(
-                "N° Chamado",
-                lambda valores: dados.loc[valores.index, "Tipo do Chamado"]
-                .fillna("")
-                .astype(str)
-                .str.lower()
-                .str.contains("incidente")
-                .sum(),
-            ),
-            Requisicao=(
-                "N° Chamado",
-                lambda valores: dados.loc[valores.index, "Tipo do Chamado"]
-                .fillna("")
-                .astype(str)
-                .str.lower()
-                .str.contains("requisi")
-                .sum(),
-            ),
-            Total=("N° Chamado", "nunique"),
-            Dentro_SLA=(
-                "SLA_Medido_Status",
-                lambda valores: (valores == "Dentro do SLA").sum(),
-            ),
-            Medidos=(
-                "SLA_Medido_Status",
-                lambda valores: valores.isin(["Dentro do SLA", "Fora do SLA"]).sum(),
-            ),
-        )
-        .reset_index()
-        .sort_values("Mes")
-    )
-    resumo["SLA (%)"] = (
-        resumo["Dentro_SLA"] / resumo["Medidos"].replace(0, pd.NA) * 100
-    ).fillna(0)
-    resumo["Mes_Label"] = resumo["Mes"].dt.strftime("%b-%y").str.lower()
-
-    return resumo
-
-
-def grafico_evolutivo_lojas(df):
-    resumo = _resumo_ultimos_meses(df)
-
-    if resumo.empty:
-        return aplicar_cor_base(px.bar(title="Evolutivo de chamados sem dados"))
-
-    barras = resumo.melt(
-        id_vars=["Mes", "Mes_Label", "Total", "SLA (%)"],
-        value_vars=["Incidente", "Requisicao"],
-        var_name="Tipo",
-        value_name="Quantidade",
-    )
-
-    figura = px.bar(
-        barras,
-        x="Mes_Label",
-        y="Quantidade",
-        color="Tipo",
-        text="Quantidade",
-        title="Evolutivo de chamados",
-        barmode="stack",
-        color_discrete_map={
-            "Incidente": "#c96a55",
-            "Requisicao": COR_GRAFICO_PRINCIPAL,
-        },
-    )
-
-    figura.add_scatter(
-        x=resumo["Mes_Label"],
-        y=resumo["Total"],
-        mode="lines+markers+text",
-        name="Total",
-        text=resumo["Total"],
-        textposition="top center",
-        line={"color": COR_GRAFICO_TEXTO},
-        yaxis="y",
-    )
-    figura.add_scatter(
-        x=resumo["Mes_Label"],
-        y=resumo["SLA (%)"],
-        mode="lines+markers+text",
-        name="SLA (%)",
-        text=resumo["SLA (%)"].round(0).astype(int).astype(str) + "%",
-        textposition="bottom center",
-        line={"color": "#e77f67", "dash": "dot"},
-        yaxis="y2",
-    )
-    figura.update_layout(
-        xaxis_title="",
-        yaxis_title="Chamados",
-        yaxis2={
-            "title": "SLA (%)",
-            "overlaying": "y",
-            "side": "right",
-            "range": [0, 100],
-        },
-        legend_title="",
-    )
-
-    return figura
-
-
-def _principais_falhas_trimestre(df, top_n=20):
-    dados = df.dropna(subset=["Abertura"]).copy()
-
-    if dados.empty:
-        return pd.DataFrame()
-
-    dados["Mes"] = dados["Abertura"].dt.to_period("M").dt.to_timestamp()
-    ultimos_meses = sorted(dados["Mes"].dropna().unique())[-3:]
-    dados = dados[dados["Mes"].isin(ultimos_meses)]
-    dados["Falha"] = (
-        dados["Produto"].fillna("Sem produto").astype(str)
-        + " - "
-        + dados["Problema"].fillna("Sem problema").astype(str)
-    )
-
-    tabela = pd.pivot_table(
-        dados,
-        values="N° Chamado",
-        index="Falha",
-        columns="Mes",
-        aggfunc=pd.Series.nunique,
-        fill_value=0,
-    )
-    tabela["Total"] = tabela.sum(axis=1)
-    tabela = tabela.sort_values("Total", ascending=False).head(top_n)
-    total_trimestre = tabela["Total"].sum()
-    tabela["%"] = tabela["Total"] / total_trimestre * 100 if total_trimestre else 0
-    tabela = tabela.reset_index()
-    tabela.columns = [
-        coluna.strftime("%b-%y").lower() if isinstance(coluna, pd.Timestamp) else coluna
-        for coluna in tabela.columns
-    ]
-
-    return tabela
-
-
 st.set_page_config(
     page_title="Relatório de Chamados N2",
     page_icon="📊",
     layout="wide",
+)
+
+st.markdown(
+    """
+    <style>
+    :root {
+        --accent: #ff7f66;
+        --accent-soft: #fff1ed;
+        --surface: rgba(255, 255, 255, 0.86);
+        --border: rgba(255, 127, 102, 0.18);
+        --text: #24232a;
+        --muted: #6b6675;
+    }
+
+    .stApp {
+        background:
+            radial-gradient(circle at top left, rgba(255, 155, 128, 0.22), transparent 34rem),
+            linear-gradient(135deg, #fff9f7 0%, #f7f9fc 52%, #ffffff 100%);
+        color: var(--text);
+    }
+
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #fff7f4 0%, #ffffff 100%);
+        border-right: 1px solid var(--border);
+    }
+
+    [data-testid="stMetric"] {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: 0 16px 40px rgba(44, 38, 35, 0.08);
+        padding: 1rem 1.1rem;
+    }
+
+    [data-testid="stMetricLabel"] p {
+        color: var(--muted);
+        font-weight: 700;
+        letter-spacing: .01em;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: var(--text);
+        font-weight: 800;
+    }
+
+    .stTabs [data-baseweb="tab-list"] {
+        gap: .35rem;
+        background: rgba(255, 255, 255, .72);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: .35rem;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 14px;
+        padding: .6rem 1rem;
+        font-weight: 700;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background: var(--accent-soft);
+        color: var(--accent);
+    }
+
+    div[data-testid="stPlotlyChart"], div[data-testid="stDataFrame"] {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: 0 16px 40px rgba(44, 38, 35, 0.06);
+        padding: .35rem;
+    }
+
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 pagina = st.sidebar.radio(
@@ -380,7 +256,7 @@ if pagina == "Atualizar base":
         f"{tratado['N° Chamado'].nunique():,}".replace(",", "."),
     )
     col3.metric(
-        "Lojas",
+        "Localizações",
         f"{tratado['Localizacao'].nunique():,}".replace(",", "."),
     )
 
@@ -413,10 +289,10 @@ if pagina == "Atualizar base":
     st.stop()
 
 
-st.title("📊 Relatório de Chamados — Suporte N2")
+st.title("📊 Central de Inteligência de Chamados")
 st.caption(
-    "Tempos calculados em horas úteis, considerando "
-    "segunda a sexta-feira e 1 dia de trabalho = 8 horas."
+    "Painel executivo para acompanhamento de volume, SLA, backlog e ofensores. "
+    "Tempos calculados em horas úteis: segunda a sexta-feira, com 1 dia = 8 horas."
 )
 
 
@@ -562,15 +438,14 @@ d4.metric(
 )
 
 
-aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8 = st.tabs(
+aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
     [
         "Visão geral",
-        "Análise semanal",
+        "Tendência semanal",
         "Problemas",
-        "Lojas e responsáveis",
+        "Localizações e responsáveis",
         "SLA e backlog",
         "Medição SLA",
-        "Saúde Operação - Lojas",
         "Detalhamento",
     ]
 )
@@ -1027,128 +902,6 @@ with aba6:
 
 
 with aba7:
-    st.caption("Indicadores Lojas")
-    st.header("Operação Lojas")
-
-    df_lojas = _base_recorte_lojas(df_filtrado)
-    kpis_lojas = calcular_kpis(df_lojas)
-    resumo_mensal_lojas = _resumo_ultimos_meses(df_lojas, meses=14)
-
-    total_chamados_lojas = kpis_lojas["total"]
-    categorias_top_10 = (
-        df_lojas.groupby("Categoria", dropna=False)["N° Chamado"]
-        .nunique()
-        .sort_values(ascending=False)
-        .head(10)
-        .index
-    )
-    df_top_10_categorias = df_lojas[df_lojas["Categoria"].isin(categorias_top_10)]
-    total_top_10_categorias = df_top_10_categorias["N° Chamado"].nunique()
-    percentual_top_10 = (
-        total_top_10_categorias / total_chamados_lojas * 100
-        if total_chamados_lojas
-        else 0
-    )
-    tipos_total = _contagem_tipos_chamado(df_lojas)
-    tipos_top_10 = _contagem_tipos_chamado(df_top_10_categorias)
-    df_sla_medido = df_lojas[
-        df_lojas["SLA_Medido_Status"].isin(["Dentro do SLA", "Fora do SLA"])
-    ]
-    tipos_sla_medido = _contagem_tipos_chamado(df_sla_medido)
-    incidentes = tipos_total["incidentes"]
-    requisicoes = tipos_total["requisicoes"]
-    total_tipo = incidentes + requisicoes
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric(
-        "Chamados abertos no período",
-        _formatar_inteiro(total_chamados_lojas),
-        _texto_tipos_chamado(tipos_total),
-        delta_color="off",
-    )
-    col2.metric(
-        "Chamados nas 10 principais categorias",
-        f"{percentual_top_10:.0f}%",
-        _texto_tipos_chamado(tipos_top_10),
-        delta_color="off",
-    )
-    col3.metric(
-        "Incidentes / Requisições",
-        (
-            f"{incidentes / total_tipo * 100:.0f}% / "
-            f"{requisicoes / total_tipo * 100:.0f}%"
-            if total_tipo
-            else "0% / 0%"
-        ),
-        _texto_tipos_chamado(tipos_total),
-        delta_color="off",
-    )
-    col4.metric(
-        "Cumprimento SLA / MTTR médio",
-        f"{kpis_lojas['sla_medido_percentual']:.0f}% / "
-        f"{_formatar_decimal(kpis_lojas['tempo_medio_horas'], 2)} h",
-        _texto_tipos_chamado(tipos_sla_medido),
-        delta_color="off",
-    )
-
-    evolucao_col, falhas_col = st.columns([1.05, 0.95])
-
-    with evolucao_col:
-        st.plotly_chart(
-            grafico_evolutivo_lojas(df_lojas),
-            width="stretch",
-            key="grafico_saude_lojas_evolutivo",
-        )
-
-        st.subheader("Observações")
-        if resumo_mensal_lojas.empty:
-            st.info("Não há dados mensais para gerar observações automáticas.")
-        else:
-            ultimos = resumo_mensal_lojas.tail(2)
-            observacoes = []
-            for _, linha in ultimos.iterrows():
-                lojas_mes = df_lojas.loc[
-                    df_lojas["Abertura"].dt.to_period("M").dt.to_timestamp()
-                    == linha["Mes"],
-                    "Localizacao",
-                ].nunique()
-                media_por_loja = linha["Total"] / lojas_mes if lojas_mes else 0
-                observacoes.append(
-                    f"{linha['Mes'].strftime('%B/%Y')}: "
-                    f"{_formatar_inteiro(linha['Total'])} chamados em "
-                    f"{_formatar_inteiro(lojas_mes)} lojas "
-                    f"({_formatar_decimal(media_por_loja, 2)} chamados/loja)."
-                )
-
-            st.markdown(
-                "\n".join(
-                    [
-                        "- **Chamados por loja**",
-                        *[f"  - {item}" for item in observacoes],
-                        f"- Sustentação de {_formatar_inteiro(total_chamados_lojas)} chamados no período filtrado.",
-                        "- Necessidade de evolução contínua em SLA, MTTR e backlog.",
-                        "- Prioridade nos ofensores recorrentes e maturidade ITSM.",
-                    ]
-                )
-            )
-
-    with falhas_col:
-        st.subheader("Principais falhas último trimestre")
-        falhas = _principais_falhas_trimestre(df_lojas, top_n=20)
-        if falhas.empty:
-            st.info("Não há dados suficientes para o último trimestre.")
-        else:
-            st.dataframe(
-                falhas,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "%": st.column_config.NumberColumn("%", format="%.1f%%"),
-                },
-            )
-
-
-with aba8:
     st.subheader("Análise dos títulos e descrições dos chamados")
 
     col_titulos, col_descricoes = st.columns(2)
