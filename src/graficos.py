@@ -498,58 +498,6 @@ def grafico_aberturas_dia_semana(df):
     return figura
 
 
-def grafico_tempo_medio_problema(df, top_n=10):
-    dados = (
-        df.loc[df["Encerrado_Flag"] & df["Tempo_Resolucao_Horas"].notna()]
-        .groupby("Problema")
-        .agg(
-            Quantidade=("N° Chamado", "nunique"),
-            Tempo_Medio_Horas=("Tempo_Resolucao_Horas", "mean"),
-        )
-        .reset_index()
-    )
-
-    # Evita destacar médias de grupos com apenas um chamado.
-    dados = dados[dados["Quantidade"] >= 2]
-
-    dados = (
-        dados.sort_values(
-            "Tempo_Medio_Horas",
-            ascending=False,
-        )
-        .head(top_n)
-        .sort_values("Tempo_Medio_Horas")
-    )
-
-    figura = px.bar(
-        dados,
-        x="Tempo_Medio_Horas",
-        y="Problema",
-        orientation="h",
-        text="Tempo_Medio_Horas",
-        title=f"Top {top_n} problemas com maior tempo médio",
-        custom_data=["Quantidade"],
-        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
-    )
-
-    figura.update_traces(
-        texttemplate="%{text:.1f} h",
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            "Tempo médio: %{x:.1f} h<br>"
-            "Chamados: %{customdata[0]}"
-            "<extra></extra>"
-        ),
-    )
-
-    figura.update_layout(
-        xaxis_title="Tempo médio útil (horas)",
-        yaxis_title="",
-    )
-
-    return figura
-
-
 def grafico_prioridades(df):
     dados = (
         df.groupby("prioridade", dropna=False)["N° Chamado"]
