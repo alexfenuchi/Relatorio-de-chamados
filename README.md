@@ -93,7 +93,6 @@ A aba **Detalhamento** possui um gráfico horizontal com as descrições de prob
 - Aging médio e aging máximo.
 - Chamados por prioridade.
 - Chamados abertos por dia da semana.
-- Problemas com maior tempo médio de resolução.
 - Lista dos chamados pendentes mais antigos.
 
 ## Leitura executiva e evolução dos relatórios

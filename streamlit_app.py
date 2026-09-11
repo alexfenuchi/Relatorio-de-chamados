@@ -26,7 +26,6 @@ from src.graficos import (
     grafico_descricoes_problemas,
     grafico_sla_semanal,
     grafico_aberturas_dia_semana,
-    grafico_tempo_medio_problema,
     grafico_prioridades,
     aplicar_cor_base,
     COR_GRAFICO_PRINCIPAL,
@@ -861,27 +860,14 @@ with aba3:
     )
 
     with aba_problemas_resumo:
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.plotly_chart(
-                grafico_top_problemas(
-                    df_filtrado,
-                    top_n=15,
-                ),
-                width="stretch",
-                key="grafico_problemas_top15",
-            )
-
-        with col2:
-            st.plotly_chart(
-                grafico_tempo_medio_problema(
-                    df_filtrado,
-                    top_n=10,
-                ),
-                width="stretch",
-                key="grafico_problemas_tempo_medio",
-            )
+        st.plotly_chart(
+            grafico_top_problemas(
+                df_filtrado,
+                top_n=15,
+            ),
+            width="stretch",
+            key="grafico_problemas_top15",
+        )
 
         resumo_problemas = (
             df_filtrado.groupby(
