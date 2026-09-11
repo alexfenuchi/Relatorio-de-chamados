@@ -894,14 +894,6 @@ with aba3:
                     "Encerrado_Flag",
                     lambda valores: (~valores).sum(),
                 ),
-                Tempo_Medio_Horas=(
-                    "Tempo_Resolucao_Horas",
-                    "mean",
-                ),
-                Tempo_Medio_Dias=(
-                    "Tempo_Resolucao_Dias",
-                    "mean",
-                ),
             )
             .reset_index()
             .sort_values(
@@ -914,16 +906,6 @@ with aba3:
             resumo_problemas,
             width="stretch",
             hide_index=True,
-            column_config={
-                "Tempo_Medio_Horas": st.column_config.NumberColumn(
-                    "Tempo médio (h)",
-                    format="%.1f",
-                ),
-                "Tempo_Medio_Dias": st.column_config.NumberColumn(
-                    "Tempo médio (dias de 8h)",
-                    format="%.1f",
-                ),
-            },
         )
 
     with aba_problemas_nivelsla:
