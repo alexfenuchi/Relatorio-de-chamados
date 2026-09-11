@@ -31,6 +31,10 @@ from src.graficos import (
     COR_GRAFICO_PRINCIPAL,
 )
 from src.exportacao import gerar_excel_relatorio
+from src.relatorios import (
+    calcular_problemas_localizacao,
+    calcular_resumo_localizacoes,
+)
 
 
 def _formatar_periodo_filtrado(df):
@@ -935,35 +939,39 @@ with aba4:
             key="grafico_responsaveis",
         )
 
-    resumo_lojas = (
-        df_filtrado.groupby(
-            "Localizacao",
-            dropna=False,
-        )
-        .agg(
-            Quantidade=("N° Chamado", "nunique"),
-            Pendentes=(
-                "Encerrado_Flag",
-                lambda valores: (~valores).sum(),
-            ),
-            Problemas_Distintos=("Problema", "nunique"),
-            Tempo_Medio_Horas=(
-                "Tempo_Resolucao_Horas",
-                "mean",
-            ),
-        )
-        .reset_index()
-        .sort_values(
-            "Quantidade",
-            ascending=False,
-        )
-    )
+    resumo_lojas = calcular_resumo_localizacoes(df_filtrado)
 
-    st.dataframe(
+    st.caption(
+        "Selecione uma linha para visualizar os problemas dessa localização."
+    )
+    selecao_localizacao = st.dataframe(
         resumo_lojas,
         width="stretch",
         hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="tabela_resumo_localizacoes",
     )
+
+    linhas_selecionadas = selecao_localizacao.selection.rows
+    if linhas_selecionadas:
+        localizacao = resumo_lojas.iloc[linhas_selecionadas[0]]["Localizacao"]
+        rotulo_localizacao = (
+            "Não informada" if pd.isna(localizacao) else str(localizacao)
+        )
+        problemas_localizacao = calcular_problemas_localizacao(
+            df_filtrado, localizacao
+        )
+
+        with st.expander(
+            f"Problemas de {rotulo_localizacao}",
+            expanded=True,
+        ):
+            st.dataframe(
+                problemas_localizacao,
+                width="stretch",
+                hide_index=True,
+            )
 
 
 with aba5:
