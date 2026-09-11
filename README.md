@@ -77,6 +77,14 @@ git push -u origin main
 
 A base Excel está bloqueada no `.gitignore` e não deve ser enviada ao GitHub.
 
+## Revisão técnica e auditoria de dados
+
+A análise priorizada de arquitetura, segurança, qualidade e métricas está em
+[`docs/revisao-tecnica-e-dados.md`](docs/revisao-tecnica-e-dados.md). Para medir
+a qualidade da base real sem alterar registros, execute
+[`sql/auditoria_base.sql`](sql/auditoria_base.sql) no SQL Editor do Supabase com
+um papel autorizado.
+
 
 ## Gráfico de descrições de problemas
 
