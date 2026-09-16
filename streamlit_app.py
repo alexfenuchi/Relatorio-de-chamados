@@ -254,15 +254,9 @@ def _renderizar_cards_recorte(
                     <div class="recorte-kpi-label">Requisições no período</div>
                 </div>
             </div>
-            <div class="recorte-kpi-card recorte-kpi-split">
-                <div>
-                    <div class="recorte-kpi-value">{kpis_recorte['sla_percentual']:.0f}%</div>
-                    <div class="recorte-kpi-label">Cumprimento do SLA</div>
-                </div>
-                <div>
-                    <div class="recorte-kpi-value">{kpis_recorte['tempo_medio_horas']:.1f}</div>
-                    <div class="recorte-kpi-label">MTTR Médio</div>
-                </div>
+            <div class="recorte-kpi-card">
+                <div class="recorte-kpi-value">{kpis_recorte['sla_percentual']:.0f}%</div>
+                <div class="recorte-kpi-label">Cumprimento do SLA</div>
             </div>
         </div>
         """.replace(",", "."),
@@ -344,7 +338,6 @@ def _renderizar_recorte_operacao(df_recorte, nome_recorte):
             Chamados=("N° Chamado", "nunique"),
             Problemas_Distintos=("Problema", "nunique"),
             Pendentes=("Encerrado_Flag", lambda valores: (~valores).sum()),
-            MTTR_Horas=("Tempo_Resolucao_Horas", "mean"),
         )
         .reset_index()
         .sort_values("Chamados", ascending=False)
@@ -355,9 +348,6 @@ def _renderizar_recorte_operacao(df_recorte, nome_recorte):
         resumo_localizacoes.head(20),
         width="stretch",
         hide_index=True,
-        column_config={
-            "MTTR_Horas": st.column_config.NumberColumn("MTTR (h)", format="%.1f"),
-        },
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1037,10 +1027,6 @@ with aba7:
         "Situacao",
         "StatusSLA",
         "nivelsla",
-        "SLA_Meta_Horas",
-        "SLA_Tempo_Medido_Horas",
-        "SLA_Medido_Status",
-        "SLA_Excedido_Horas",
         "Equipe Responsavel",
         "Responsavel",
         "Categoria",
@@ -1066,18 +1052,6 @@ with aba7:
         width="stretch",
         hide_index=True,
         column_config={
-            "SLA_Meta_Horas": st.column_config.NumberColumn(
-                "Meta SLA (h)",
-                format="%.1f",
-            ),
-            "SLA_Tempo_Medido_Horas": st.column_config.NumberColumn(
-                "Tempo medido SLA (h)",
-                format="%.1f",
-            ),
-            "SLA_Excedido_Horas": st.column_config.NumberColumn(
-                "SLA excedido (h)",
-                format="%.1f",
-            ),
             "Tempo_Resolucao_Horas": st.column_config.NumberColumn(
                 "Resolução (h úteis)",
                 format="%.1f",
