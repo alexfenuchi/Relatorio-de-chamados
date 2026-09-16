@@ -1,23 +1,43 @@
 import pandas as pd
 import plotly.express as px
+import plotly.io as pio
+import plotly.graph_objects as go
 
 from src.metricas import calcular_resumo_sla_medido_por_nivel
+from src.tema import (
+    CORES_LOCALIZACAO,
+    COR_BORDA,
+    COR_ERRO,
+    COR_GRADE,
+    COR_PRIMARIA,
+    COR_SUPERFICIE,
+    COR_TEXTO,
+    COR_TEXTO_SUAVE,
+    COR_TITULO,
+    PALETA_CATEGORICA,
+)
 
-COR_GRAFICO_PRINCIPAL = "#ff9b80"
-PALETA_GRAFICOS = [
-    COR_GRAFICO_PRINCIPAL,
-    "#ffb39f",
-    "#e77f67",
-    "#ffc8bb",
-    "#c96a55",
-    "#ffe0d8",
-]
-COR_GRAFICO_TEXTO = "#2f2f2f"
-CORES_GRUPO_LOCALIZACAO = {
-    "Loja": COR_GRAFICO_PRINCIPAL,
-    "CD": "#3977a8",
-    "Não informado": "#9b96a3",
-}
+COR_GRAFICO_PRINCIPAL = COR_PRIMARIA
+PALETA_GRAFICOS = PALETA_CATEGORICA
+COR_GRAFICO_TEXTO = COR_TEXTO
+CORES_GRUPO_LOCALIZACAO = CORES_LOCALIZACAO
+
+
+TEMA_GRAFICOS = go.layout.Template(
+    layout={
+        "font": {"color": COR_TEXTO, "family": "Inter, sans-serif"},
+        "title": {"font": {"color": COR_TITULO, "size": 20}},
+        "paper_bgcolor": COR_SUPERFICIE,
+        "plot_bgcolor": COR_SUPERFICIE,
+        "colorway": PALETA_GRAFICOS,
+        "hoverlabel": {"bgcolor": COR_TITULO, "font": {"color": COR_SUPERFICIE}},
+        "legend": {"font": {"color": COR_TEXTO_SUAVE}},
+        "xaxis": {"gridcolor": COR_GRADE, "linecolor": COR_BORDA, "zeroline": False},
+        "yaxis": {"gridcolor": COR_GRADE, "linecolor": COR_BORDA, "zeroline": False},
+    }
+)
+pio.templates["relatorio_chamados"] = TEMA_GRAFICOS
+px.defaults.template = "relatorio_chamados"
 
 
 def _com_grupo_localizacao(df):
@@ -643,7 +663,7 @@ def grafico_sla_por_nivel(df):
         title="Medição de SLA por nível",
         color_discrete_map={
             "Dentro do SLA": COR_GRAFICO_PRINCIPAL,
-            "Fora do SLA": "#c96a55",
+            "Fora do SLA": COR_ERRO,
         },
     )
 
