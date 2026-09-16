@@ -8,13 +8,6 @@ from src.leitura import carregar_excel
 from src.tratamento import SLA_NIVEIS_HORAS, preparar_base
 from src.filtros import aplicar_filtros, renderizar_filtros
 from src.metricas import calcular_kpis
-from src.metricas import (
-    METAS_EXECUTIVAS,
-    calcular_fluxo_periodo,
-    calcular_kpis,
-    calcular_periodo_anterior,
-    calcular_variacao,
-)
 from src.graficos import (
     grafico_evolucao_semanal,
     grafico_top_problemas,
@@ -27,6 +20,7 @@ from src.graficos import (
     grafico_sla_semanal,
     grafico_aberturas_dia_semana,
     grafico_prioridades,
+    grafico_tendencia_anual,
     aplicar_cor_base,
     COR_GRAFICO_PRINCIPAL,
 )
@@ -749,6 +743,12 @@ aba1, aba2, aba3, aba4, aba5, aba6, aba7 = st.tabs(
 
 
 with aba1:
+    st.plotly_chart(
+        grafico_tendencia_anual(df_filtrado),
+        width="stretch",
+        key="grafico_visao_tendencia_anual",
+    )
+
     col1, col2 = st.columns(2)
 
     with col1:
