@@ -25,6 +25,13 @@ from src.graficos import (
     COR_GRAFICO_PRINCIPAL,
 )
 from src.exportacao import gerar_excel_relatorio
+from src.tema import (
+    COR_GRADE,
+    COR_SECUNDARIA,
+    COR_SUPERFICIE,
+    COR_TEXTO,
+    COR_TITULO,
+)
 from src.relatorios import (
     calcular_problemas_localizacao,
     calcular_resumo_localizacoes,
@@ -135,7 +142,7 @@ def _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte):
         x=mensal["Mes_Label"],
         y=mensal["Incidente"],
         name="Incidente",
-        marker_color="#6f6764",
+        marker_color=COR_SECUNDARIA,
         text=mensal["Incidente"],
         texttemplate="%{text:.0f}",
         textposition="inside",
@@ -154,8 +161,11 @@ def _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte):
         y=mensal["Total"],
         name="Total",
         mode="lines+markers+text",
-        line={"color": "#3d3634", "width": 2},
-        marker={"color": "white", "line": {"color": "#3d3634", "width": 1.5}},
+        line={"color": COR_TITULO, "width": 2},
+        marker={
+            "color": COR_SUPERFICIE,
+            "line": {"color": COR_TITULO, "width": 1.5},
+        },
         text=mensal["Total"],
         textposition="top center",
         yaxis="y",
@@ -165,8 +175,8 @@ def _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte):
         y=mensal["SLA_Percentual"],
         name="SLA (%)",
         mode="lines+markers+text",
-        line={"color": "#111111", "width": 2},
-        marker={"color": "#111111"},
+        line={"color": COR_TEXTO, "width": 2},
+        marker={"color": COR_TEXTO},
         text=mensal["SLA_Percentual"].round(0).astype(int).astype(str) + "%",
         textposition="bottom center",
         yaxis="y2",
@@ -178,9 +188,9 @@ def _grafico_evolutivo_chamados_recorte(df_recorte, nome_recorte):
         height=360,
         margin={"l": 25, "r": 30, "t": 55, "b": 25},
         legend={"orientation": "h", "y": 1.15, "x": 0.2},
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        yaxis={"title": "", "rangemode": "tozero", "gridcolor": "#eeeeee"},
+        plot_bgcolor=COR_SUPERFICIE,
+        paper_bgcolor=COR_SUPERFICIE,
+        yaxis={"title": "", "rangemode": "tozero", "gridcolor": COR_GRADE},
         yaxis2={
             "title": "",
             "overlaying": "y",
@@ -356,13 +366,18 @@ st.markdown(
     """
     <style>
     :root {
-        --accent: #ff6b4a;
-        --accent-soft: #fff0ec;
-        --navy: #16324f;
+        --accent: #FF6B4A;
+        --accent-soft: #FFF0EC;
+        --navy: #16324F;
         --surface: rgba(255, 255, 255, 0.86);
         --border: rgba(255, 127, 102, 0.18);
-        --text: #24232a;
-        --muted: #6b6675;
+        --text: #24232A;
+        --muted: #6B6675;
+        --secondary: #3977A8;
+        --success: #278A67;
+        --warning: #E9A23B;
+        --danger: #C73E1D;
+        --neutral: #9B96A3;
     }
 
     .stApp {
@@ -387,14 +402,14 @@ st.markdown(
     .hero-badge { color: #ffb49f; font-size: .76rem; font-weight: 800; letter-spacing: .12em; }
 
     .section-kicker { color: var(--accent); font-size: .72rem; font-weight: 900; letter-spacing: .14em; margin-top: 1.4rem; }
-    .insight-card { background: white; border: 1px solid #e5ebf0; border-top: 4px solid #6c8193; border-radius: 14px; min-height: 150px; padding: 1rem; box-shadow: 0 8px 24px rgba(16,42,67,.06); }
+    .insight-card { background: white; border: 1px solid #E5EBF0; border-top: 4px solid var(--neutral); border-radius: 14px; min-height: 150px; padding: 1rem; box-shadow: 0 8px 24px rgba(16,42,67,.06); }
     .insight-card strong { color: var(--navy); display: block; margin: .45rem 0; }
     .insight-card p { color: var(--muted); font-size: .86rem; line-height: 1.45; margin: 0; }
     .insight-icon { align-items: center; background: #eef4f7; border-radius: 99px; display: flex; font-weight: 900; height: 28px; justify-content: center; width: 28px; }
-    .insight-crítico { border-top-color: #c73e1d; }
-    .insight-atenção { border-top-color: #ed9b27; }
-    .insight-positivo { border-top-color: #278a67; }
-    .insight-informativo { border-top-color: #3977a8; }
+    .insight-crítico { border-top-color: var(--danger); }
+    .insight-atenção { border-top-color: var(--warning); }
+    .insight-positivo { border-top-color: var(--success); }
+    .insight-informativo { border-top-color: var(--secondary); }
 
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #fff7f4 0%, #ffffff 100%);
@@ -454,7 +469,7 @@ st.markdown(
     }
 
     .recorte-title {
-        color: #221f20;
+        color: var(--text);
         font-size: 2.2rem;
         font-weight: 900;
         margin: .1rem 0 .15rem 0;
@@ -493,7 +508,7 @@ st.markdown(
     }
 
     .recorte-kpi-value {
-        color: #221f20;
+        color: var(--text);
         font-size: 2rem;
         font-weight: 900;
         line-height: 1;
