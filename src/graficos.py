@@ -140,19 +140,42 @@ def grafico_top_lojas(df, top_n=15):
 
 
 def grafico_status(df):
+    dados_base = df.copy()
+    if "Grupo_Localizacao" not in dados_base.columns:
+        dados_base["Grupo_Localizacao"] = "Não informado"
+
+    dados_base["Grupo_Localizacao"] = (
+        dados_base["Grupo_Localizacao"].fillna("Não informado")
+    )
     dados = (
-        df.groupby("Situacao", dropna=False)["N° Chamado"]
+        dados_base.groupby(
+            ["Situacao", "Grupo_Localizacao"],
+            dropna=False,
+        )["N° Chamado"]
         .nunique()
         .reset_index(name="Quantidade")
+    )
+    dados["Situação e local"] = (
+        dados["Situacao"].fillna("Não informada").astype(str)
+        + " — "
+        + dados["Grupo_Localizacao"].astype(str)
     )
 
     return px.pie(
         dados,
-        names="Situacao",
+        names="Situação e local",
         values="Quantidade",
         hole=0.55,
-        title="Distribuição por situação",
+        title="Distribuição por situação: CD x Loja",
         color_discrete_sequence=PALETA_GRAFICOS,
+        custom_data=["Situacao", "Grupo_Localizacao"],
+    ).update_traces(
+        hovertemplate=(
+            "Situação: %{customdata[0]}<br>"
+            "Local: %{customdata[1]}<br>"
+            "Chamados: %{value}<br>"
+            "Percentual: %{percent}<extra></extra>"
+        )
     )
 
 
