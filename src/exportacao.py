@@ -1,6 +1,8 @@
 from io import BytesIO
 import pandas as pd
 
+from src.tema import COR_SUPERFICIE, COR_TITULO
+
 from src.tratamento import SLA_NIVEIS_HORAS
 from src.metricas import calcular_resumo_sla_medido_por_nivel
 from src.metricas import METAS_EXECUTIVAS, calcular_fluxo_periodo, calcular_kpis
@@ -168,8 +170,8 @@ def gerar_excel_relatorio(df: pd.DataFrame) -> bytes:
             cabecalho = workbook.add_format(
                 {
                     "bold": True,
-                    "font_color": "#FFFFFF",
-                    "bg_color": "#16324F",
+                    "font_color": COR_SUPERFICIE,
+                    "bg_color": COR_TITULO,
                     "border": 0,
                     "align": "left",
                 }

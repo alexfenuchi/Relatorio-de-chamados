@@ -3,6 +3,8 @@ import unittest
 import pandas as pd
 
 from src.graficos import (
+    CORES_GRUPO_LOCALIZACAO,
+    COR_GRAFICO_PRINCIPAL,
     grafico_aberturas_dia_semana,
     grafico_prioridades,
     grafico_sla,
@@ -11,6 +13,7 @@ from src.graficos import (
     grafico_top_lojas,
     grafico_top_problemas,
 )
+from src.tema import CORES_LOCALIZACAO, COR_PRIMARIA, COR_TEXTO, COR_TITULO
 
 
 class GraficoStatusTest(unittest.TestCase):
@@ -74,6 +77,18 @@ class GraficoStatusTest(unittest.TestCase):
         self.assertEqual({trace.name for trace in figura.data}, {"CD", "Loja"})
         self.assertEqual(sum(sum(trace.y) for trace in figura.data), 5)
         self.assertEqual(figura.layout.xaxis.dtick, "M1")
+
+    def test_graficos_usam_a_identidade_visual_compartilhada(self):
+        figura = grafico_top_problemas(self.dados)
+
+        self.assertEqual(COR_GRAFICO_PRINCIPAL, COR_PRIMARIA)
+        self.assertEqual(CORES_GRUPO_LOCALIZACAO, CORES_LOCALIZACAO)
+        self.assertEqual(
+            {trace.name: trace.marker.color for trace in figura.data},
+            {"CD": CORES_LOCALIZACAO["CD"], "Loja": CORES_LOCALIZACAO["Loja"]},
+        )
+        self.assertEqual(figura.layout.template.layout.font.color, COR_TEXTO)
+        self.assertEqual(figura.layout.template.layout.title.font.color, COR_TITULO)
 
 
 if __name__ == "__main__":
