@@ -13,6 +13,20 @@ PALETA_GRAFICOS = [
     "#ffe0d8",
 ]
 COR_GRAFICO_TEXTO = "#2f2f2f"
+CORES_GRUPO_LOCALIZACAO = {
+    "Loja": COR_GRAFICO_PRINCIPAL,
+    "CD": "#3977a8",
+    "Não informado": "#9b96a3",
+}
+
+
+def _com_grupo_localizacao(df):
+    """Devolve uma cópia com um grupo utilizável nas comparações da visão geral."""
+    dados = df.copy()
+    if "Grupo_Localizacao" not in dados.columns:
+        dados["Grupo_Localizacao"] = "Não informado"
+    dados["Grupo_Localizacao"] = dados["Grupo_Localizacao"].fillna("Não informado")
+    return dados
 
 
 def aplicar_cor_base(figura):
@@ -84,14 +98,20 @@ def grafico_evolucao_semanal(df):
 
 
 def grafico_top_problemas(df, top_n=10):
+    dados_base = _com_grupo_localizacao(df)
+    principais = (
+        dados_base.groupby("Problema", dropna=False)["N° Chamado"]
+        .nunique()
+        .nlargest(top_n)
+        .index
+    )
     dados = (
-        df.groupby("Problema", dropna=False)["N° Chamado"]
+        dados_base[dados_base["Problema"].isin(principais)]
+        .groupby(["Problema", "Grupo_Localizacao"], dropna=False)["N° Chamado"]
         .nunique()
         .reset_index(name="Quantidade")
-        .sort_values("Quantidade", ascending=False)
-        .head(top_n)
-        .sort_values("Quantidade")
     )
+    ordem = list(reversed(principais.tolist()))
 
     fig = px.bar(
         dados,
@@ -99,21 +119,28 @@ def grafico_top_problemas(df, top_n=10):
         y="Problema",
         orientation="h",
         text="Quantidade",
-        title=f"Top {top_n} problemas",
-        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
+        color="Grupo_Localizacao",
+        barmode="group",
+        title=f"Top {top_n} problemas: CD x Loja",
+        color_discrete_map=CORES_GRUPO_LOCALIZACAO,
+        category_orders={"Problema": ordem},
     )
 
     fig.update_layout(
         xaxis_title="Chamados",
         yaxis_title="",
+        legend_title="Local",
     )
 
     return fig
 
 
 def grafico_top_lojas(df, top_n=15):
+    dados_base = _com_grupo_localizacao(df)
     dados = (
-        df.groupby("Localizacao", dropna=False)["N° Chamado"]
+        dados_base.groupby(["Localizacao", "Grupo_Localizacao"], dropna=False)[
+            "N° Chamado"
+        ]
         .nunique()
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
@@ -127,26 +154,22 @@ def grafico_top_lojas(df, top_n=15):
         y="Localizacao",
         orientation="h",
         text="Quantidade",
-        title=f"Top {top_n} localizações com mais chamados",
-        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
+        color="Grupo_Localizacao",
+        title=f"Top {top_n} localizações com mais chamados: CD x Loja",
+        color_discrete_map=CORES_GRUPO_LOCALIZACAO,
     )
 
     fig.update_layout(
         xaxis_title="Chamados",
         yaxis_title="",
+        legend_title="Local",
     )
 
     return fig
 
 
 def grafico_status(df):
-    dados_base = df.copy()
-    if "Grupo_Localizacao" not in dados_base.columns:
-        dados_base["Grupo_Localizacao"] = "Não informado"
-
-    dados_base["Grupo_Localizacao"] = (
-        dados_base["Grupo_Localizacao"].fillna("Não informado")
-    )
+    dados_base = _com_grupo_localizacao(df)
     dados = (
         dados_base.groupby(
             ["Situacao", "Grupo_Localizacao"],
@@ -180,8 +203,11 @@ def grafico_status(df):
 
 
 def grafico_sla(df):
+    dados_base = _com_grupo_localizacao(df)
     dados = (
-        df.groupby("StatusSLA", dropna=False)["N° Chamado"]
+        dados_base.groupby(["StatusSLA", "Grupo_Localizacao"], dropna=False)[
+            "N° Chamado"
+        ]
         .nunique()
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
@@ -192,13 +218,16 @@ def grafico_sla(df):
         x="StatusSLA",
         y="Quantidade",
         text="Quantidade",
-        title="Chamados por status de SLA",
-        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
+        color="Grupo_Localizacao",
+        barmode="group",
+        title="Chamados por status de SLA: CD x Loja",
+        color_discrete_map=CORES_GRUPO_LOCALIZACAO,
     )
 
     fig.update_layout(
         xaxis_title="Status SLA",
         yaxis_title="Chamados",
+        legend_title="Local",
     )
 
     return fig
@@ -497,10 +526,10 @@ def grafico_aberturas_dia_semana(df):
         "Domingo",
     ]
 
+    dados_base = _com_grupo_localizacao(df)
     dados = (
-        df.groupby("DiaSemana")["N° Chamado"]
+        dados_base.groupby(["DiaSemana", "Grupo_Localizacao"])["N° Chamado"]
         .nunique()
-        .reindex(ordem, fill_value=0)
         .reset_index(name="Quantidade")
     )
 
@@ -509,21 +538,28 @@ def grafico_aberturas_dia_semana(df):
         x="DiaSemana",
         y="Quantidade",
         text="Quantidade",
-        title="Chamados abertos por dia da semana",
-        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
+        color="Grupo_Localizacao",
+        barmode="group",
+        title="Chamados abertos por dia da semana: CD x Loja",
+        color_discrete_map=CORES_GRUPO_LOCALIZACAO,
+        category_orders={"DiaSemana": ordem},
     )
 
     figura.update_layout(
         xaxis_title="Dia da semana",
         yaxis_title="Chamados",
+        legend_title="Local",
     )
 
     return figura
 
 
 def grafico_prioridades(df):
+    dados_base = _com_grupo_localizacao(df)
     dados = (
-        df.groupby("prioridade", dropna=False)["N° Chamado"]
+        dados_base.groupby(["prioridade", "Grupo_Localizacao"], dropna=False)[
+            "N° Chamado"
+        ]
         .nunique()
         .reset_index(name="Quantidade")
         .sort_values("Quantidade", ascending=False)
@@ -534,15 +570,53 @@ def grafico_prioridades(df):
         x="prioridade",
         y="Quantidade",
         text="Quantidade",
-        title="Chamados por prioridade",
-        color_discrete_sequence=[COR_GRAFICO_PRINCIPAL],
+        color="Grupo_Localizacao",
+        barmode="group",
+        title="Chamados por prioridade: CD x Loja",
+        color_discrete_map=CORES_GRUPO_LOCALIZACAO,
     )
 
     figura.update_layout(
         xaxis_title="Prioridade",
         yaxis_title="Chamados",
+        legend_title="Local",
     )
 
+    return figura
+
+
+def grafico_tendencia_anual(df):
+    """Exibe a evolução mensal anual dos chamados, separada entre CD e Loja."""
+    dados = _com_grupo_localizacao(df).dropna(subset=["Abertura"]).copy()
+    if dados.empty:
+        return aplicar_cor_base(px.line(title="Tendência anual sem datas disponíveis"))
+
+    dados["Mes"] = dados["Abertura"].dt.to_period("M").dt.to_timestamp()
+    mensal = (
+        dados.groupby(["Mes", "Grupo_Localizacao"])["N° Chamado"]
+        .nunique()
+        .reset_index(name="Quantidade")
+        .sort_values("Mes")
+    )
+
+    figura = px.line(
+        mensal,
+        x="Mes",
+        y="Quantidade",
+        color="Grupo_Localizacao",
+        markers=True,
+        text="Quantidade",
+        title="Tendência anual de chamados: CD x Loja",
+        color_discrete_map=CORES_GRUPO_LOCALIZACAO,
+    )
+    figura.update_traces(mode="lines+markers+text", textposition="top center")
+    figura.update_layout(
+        xaxis_title="Mês",
+        yaxis_title="Chamados",
+        legend_title="Local",
+        hovermode="x unified",
+    )
+    figura.update_xaxes(dtick="M1", tickformat="%b/%Y")
     return figura
 
 
@@ -597,9 +671,7 @@ def grafico_percentual_sla_por_nivel(df):
         }
     )
     resumo["Percentual_Dentro"] = (
-        resumo["Dentro"]
-        / resumo["Chamados_Medidos"].replace(0, pd.NA)
-        * 100
+        resumo["Dentro"] / resumo["Chamados_Medidos"].replace(0, pd.NA) * 100
     ).fillna(0)
     resumo = resumo[resumo["Chamados_Medidos"] > 0].sort_values("Percentual_Dentro")
 
